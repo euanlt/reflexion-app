@@ -57,7 +57,10 @@ export function EmotionExercise({ onComplete, isCompleted }: EmotionExerciseProp
       }, 2000);
     } else {
       // All emotions completed
+      // Calculate score based on face detection rate
+      const detectionRate = faceData.length > 0 ? Math.min(100, (faceData.length / 30) * 100) : 80;
       const exerciseData = {
+        score: detectionRate,
         completedEmotions: EMOTIONS.length,
         faceDataPoints: faceData.length,
         timestamp: new Date().toISOString()

@@ -7,6 +7,8 @@ import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, Brain, Calendar, TrendingUp, Award, Heart, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { getLatestRiskScore, getAssessmentHistory } from '@/lib/risk-calculation';
+import { getAssessmentHistory as getStoredHistory } from '@/lib/assessment-storage';
 
 // Mock data for demonstration
 const MOCK_DATA = {
@@ -37,10 +39,89 @@ const MOCK_DATA = {
 
 export default function DashboardPage() {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   useEffect(() => {
     setIsLoaded(true);
+    loadDashboardData();
   }, []);
+  
+  const loadDashboardData = () => {
+    try {
+      // Get latest risk score
+      const latestScore = getLatestRiskScore();
+      const history = getStoredHistory();
+      
+      // Calculate streak
+      let streak = 0;
+      const today = new Date();
+      for (let i = history.length - 1; i >= 0; i--) {
+        const assessmentDate = new Date(history[i].date);
+        const daysDiff = Math.floor((today.getTime() - assessmentDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysDiff === streak) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+      
+      // Get weekly progress
+      const weekData = history.slice(-7).map((assessment, index) => {
+        const date = new Date(assessment.date);
+        const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
+        return {
+          day: dayName,
+          score: assessment.overallScore || 0,
+          mood: Math.ceil((assessment.overallScore || 0) / 20) // Convert to 1-5 scale
+        };
+      });
+      
+      // Calculate average score
+      const averageScore = history.length > 0 
+        ? Math.round(history.reduce((sum, a) => sum + (a.overallScore || 0), 0) / history.length)
+        : 0;
+      
+      // Get task performance from latest assessment
+      const taskPerformance = latestScore ? [
+        { task: 'Memory', score: latestScore.components.memory, improvement: '+5%' },
+        { task: 'Speech', score: latestScore.components.speech, improvement: '+3%' },
+        { task: 'Emotion', score: latestScore.components.facial, improvement: '+8%' },
+      ] : MOCK_DATA.taskPerformance;
+      
+      setDashboardData({
+        latestScore,
+        streak,
+        totalSessions: history.length,
+        averageScore,
+        weeklyProgress: weekData.length > 0 ? weekData : MOCK_DATA.weeklyProgress,
+        taskPerformance,
+        achievements: MOCK_DATA.achievements // Keep mock achievements for now
+      });
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      // Fall back to mock data
+      setDashboardData({
+        latestScore: null,
+        ...MOCK_DATA
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  if (isLoadingData || !dashboardData) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-senior-base text-gray-600">Loading your health data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -62,7 +143,7 @@ export default function DashboardPage() {
         <Card className="senior-card gradient-primary text-white">
           <div className="text-center">
             <Calendar className="w-8 h-8 mx-auto mb-3" />
-            <p className="text-3xl font-bold mb-1">{MOCK_DATA.streak}</p>
+            <p className="text-3xl font-bold mb-1">{dashboardData.streak}</p>
             <p className="text-sm opacity-90">Day Streak</p>
           </div>
         </Card>
@@ -70,7 +151,7 @@ export default function DashboardPage() {
         <Card className="senior-card gradient-success text-white">
           <div className="text-center">
             <TrendingUp className="w-8 h-8 mx-auto mb-3" />
-            <p className="text-3xl font-bold mb-1">{MOCK_DATA.averageScore}%</p>
+            <p className="text-3xl font-bold mb-1">{dashboardData.averageScore}%</p>
             <p className="text-sm opacity-90">Average Score</p>
           </div>
         </Card>
@@ -78,7 +159,7 @@ export default function DashboardPage() {
         <Card className="senior-card bg-purple-600 text-white">
           <div className="text-center">
             <Brain className="w-8 h-8 mx-auto mb-3" />
-            <p className="text-3xl font-bold mb-1">{MOCK_DATA.totalSessions}</p>
+            <p className="text-3xl font-bold mb-1">{dashboardData.totalSessions}</p>
             <p className="text-sm opacity-90">Total Sessions</p>
           </div>
         </Card>
@@ -94,7 +175,7 @@ export default function DashboardPage() {
           
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MOCK_DATA.weeklyProgress}>
+              <LineChart data={dashboardData.weeklyProgress}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis domain={[0, 100]} />
@@ -126,7 +207,7 @@ export default function DashboardPage() {
           </h3>
           
           <div className="space-y-4">
-            {MOCK_DATA.taskPerformance.map((task, index) => (
+            {dashboardData.taskPerformance.map((task: any, index: number) => (
               <div key={task.task} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
@@ -153,7 +234,7 @@ export default function DashboardPage() {
           </h3>
           
           <div className="grid grid-cols-2 gap-4">
-            {MOCK_DATA.achievements.map((achievement, index) => (
+            {dashboardData.achievements.map((achievement: any, index: number) => (
               <div 
                 key={achievement.title}
                 className={`p-4 rounded-xl text-center transition-all duration-200 ${

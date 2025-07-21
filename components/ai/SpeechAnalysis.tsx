@@ -98,7 +98,23 @@ export function SpeechAnalysis({ onComplete, isCompleted }: SpeechAnalysisProps)
     const speakingTime = blob.size / 16000; // Rough estimate
     const wordsPerMinute = speakingTime > 0 ? (wordCount / speakingTime) * 60 : 0;
     
+    // Calculate score based on speech metrics
+    let score = 0;
+    // Word count scoring (expect at least 10 words)
+    if (wordCount >= 10) score += 40;
+    else score += (wordCount / 10) * 40;
+    
+    // Speaking pace scoring (ideal: 100-150 words per minute)
+    if (wordsPerMinute >= 80 && wordsPerMinute <= 180) score += 40;
+    else if (wordsPerMinute >= 60 && wordsPerMinute <= 200) score += 30;
+    else score += 20;
+    
+    // Transcript length scoring
+    if (transcript.length > 50) score += 20;
+    else score += (transcript.length / 50) * 20;
+    
     const analysis = {
+      score: Math.round(score),
       wordCount,
       wordsPerMinute: Math.round(wordsPerMinute),
       transcriptLength: transcript.length,
@@ -107,7 +123,11 @@ export function SpeechAnalysis({ onComplete, isCompleted }: SpeechAnalysisProps)
     };
     
     setAnalysisData(analysis);
-    onComplete?.(analysis);
+    
+    // Only call onComplete when all questions are answered
+    if (currentQuestion === questions.length - 1) {
+      onComplete?.(analysis);
+    }
   };
 
   const playRecording = () => {

@@ -189,3 +189,23 @@ export class AssessmentStorage {
     }
   }
 }
+
+// Export convenience functions for compatibility
+export async function saveAssessment(assessment: any): Promise<void> {
+  const completeAssessment: CompleteAssessment = {
+    date: new Date().toISOString(),
+    results: [],
+    overallScore: assessment.overallScore || 0,
+    riskLevel: assessment.riskLevel || 'low',
+    duration: 0,
+    completedAt: new Date().toISOString()
+  };
+  
+  await AssessmentStorage.saveAssessment(completeAssessment);
+}
+
+export function getAssessmentHistory(): any[] {
+  // Return from localStorage for now, will migrate to IndexedDB
+  const stored = localStorage.getItem('assessment-history');
+  return stored ? JSON.parse(stored) : [];
+}

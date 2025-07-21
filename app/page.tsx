@@ -10,16 +10,8 @@ import Link from 'next/link';
 import { EmergencyNotificationSystem } from '@/components/emergency/EmergencyNotificationSystem';
 import { PerformanceMonitor } from '@/components/performance/PerformanceMonitor';
 import { useAccessibility } from '@/components/accessibility/AccessibilityProvider';
-
-// Mock user data - in real app this would come from assessment results
-const USER_ASSESSMENT = {
-  riskScore: 80, // Can be 10 (low), 50 (medium), 80 (high)
-  riskLevel: 'High Risk',
-  speakingPatterns: 80,
-  face: 80,
-  speechContent: 80,
-  lastAssessment: '2 hours ago'
-};
+import { getLatestRiskScore } from '@/lib/risk-calculation';
+import { getAssessmentHistory } from '@/lib/assessment-storage';
 
 const getRiskConfig = (score: number) => {
   if (score <= 30) {
@@ -60,21 +52,66 @@ const getRiskConfig = (score: number) => {
 
 export default function HomePage() {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [assessmentData, setAssessmentData] = useState<any>(null);
   const { announceToScreenReader } = useAccessibility();
-  const riskConfig = getRiskConfig(USER_ASSESSMENT.riskScore);
+  
+  // Get risk config based on actual or default data
+  const riskScore = assessmentData?.overallScore || 0;
+  const riskConfig = getRiskConfig(riskScore);
   const IconComponent = riskConfig.icon;
 
   useEffect(() => {
     setIsLoaded(true);
-    
-    // Announce page load to screen readers
-    announceToScreenReader(`Reflexion dashboard loaded. Current risk level: ${riskConfig.level}`);
-    
-    // Announce high-risk state
-    if (USER_ASSESSMENT.riskScore >= 70) {
-      announceToScreenReader('High risk assessment detected. Emergency contacts will be notified.');
-    }
+    loadAssessmentData();
   }, []);
+  
+  useEffect(() => {
+    if (assessmentData) {
+      // Announce page load to screen readers
+      announceToScreenReader(`Reflexion dashboard loaded. Current risk level: ${riskConfig.level}`);
+      
+      // Announce high-risk state
+      if (assessmentData.overallScore >= 70) {
+        announceToScreenReader('High risk assessment detected. Emergency contacts will be notified.');
+      }
+    }
+  }, [assessmentData, riskConfig.level]);
+  
+  const loadAssessmentData = () => {
+    try {
+      const latestScore = getLatestRiskScore();
+      const history = getAssessmentHistory();
+      
+      if (latestScore) {
+        // Get time of last assessment
+        const lastAssessment = history.length > 0 ? history[history.length - 1] : null;
+        const lastAssessmentTime = lastAssessment ? getRelativeTime(new Date(lastAssessment.date)) : 'No assessment yet';
+        
+        setAssessmentData({
+          ...latestScore,
+          speakingPatterns: latestScore.components.speech,
+          face: latestScore.components.facial,
+          speechContent: latestScore.components.memory,
+          lastAssessment: lastAssessmentTime
+        });
+      }
+    } catch (error) {
+      console.error('Error loading assessment data:', error);
+    }
+  };
+  
+  const getRelativeTime = (date: Date): string => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffHours < 1) return 'Less than an hour ago';
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays === 1) return '1 day ago';
+    return `${diffDays} days ago`;
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -114,12 +151,12 @@ export default function HomePage() {
                 strokeWidth="8"
                 fill="none"
                 strokeDasharray={`${2 * Math.PI * 40}`}
-                strokeDashoffset={`${2 * Math.PI * 40 * (1 - USER_ASSESSMENT.riskScore / 100)}`}
+                strokeDashoffset={`${2 * Math.PI * 40 * (1 - riskScore / 100)}`}
                 className="transition-all duration-1000 ease-out"
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className={`text-4xl font-bold ${riskConfig.color}`}>{USER_ASSESSMENT.riskScore}</span>
+              <span className={`text-4xl font-bold ${riskConfig.color}`}>{riskScore}</span>
               <span className={`text-lg font-medium ${riskConfig.color}`}>{riskConfig.level}</span>
             </div>
           </div>
@@ -129,38 +166,38 @@ export default function HomePage() {
         <div className={`space-y-4 mb-8 transform transition-all duration-1000 delay-200 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
           <div className="flex items-center justify-between">
             <span className="text-lg font-medium text-gray-900">Speaking Patterns</span>
-            <span className="text-lg font-bold text-gray-900">{USER_ASSESSMENT.speakingPatterns}</span>
+            <span className="text-lg font-bold text-gray-900">{assessmentData?.speakingPatterns || 0}</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className={`${riskConfig.progressColor} h-2 rounded-full`} style={{ width: `${USER_ASSESSMENT.speakingPatterns}%` }}></div>
+            <div className={`${riskConfig.progressColor} h-2 rounded-full`} style={{ width: `${assessmentData?.speakingPatterns || 0}%` }}></div>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-lg font-medium text-gray-900">Face</span>
-            <span className="text-lg font-bold text-gray-900">{USER_ASSESSMENT.face}</span>
+            <span className="text-lg font-bold text-gray-900">{assessmentData?.face || 0}</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className={`${riskConfig.progressColor} h-2 rounded-full`} style={{ width: `${USER_ASSESSMENT.face}%` }}></div>
+            <div className={`${riskConfig.progressColor} h-2 rounded-full`} style={{ width: `${assessmentData?.face || 0}%` }}></div>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-lg font-medium text-gray-900">Speech Content</span>
-            <span className="text-lg font-bold text-gray-900">{USER_ASSESSMENT.speechContent}</span>
+            <span className="text-lg font-bold text-gray-900">{assessmentData?.speechContent || 0}</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className={`${riskConfig.progressColor} h-2 rounded-full`} style={{ width: `${USER_ASSESSMENT.speechContent}%` }}></div>
+            <div className={`${riskConfig.progressColor} h-2 rounded-full`} style={{ width: `${assessmentData?.speechContent || 0}%` }}></div>
           </div>
         </div>
 
         {/* Risk Status Card */}
         <div className={`mb-8 transform transition-all duration-1000 delay-400 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
           {/* Emergency Notification System */}
-          {USER_ASSESSMENT.riskScore >= 70 && (
+          {riskScore >= 70 && (
             <div className="mb-6">
               <EmergencyNotificationSystem
-                riskScore={USER_ASSESSMENT.riskScore}
+                riskScore={riskScore}
                 patientName="Helena"
-                assessmentData={USER_ASSESSMENT}
+                assessmentData={assessmentData || {}}
                 onNotificationSent={(contact, method) => {
                   announceToScreenReader(`Emergency notification sent to ${contact.name} via ${method}`);
                 }}
@@ -178,7 +215,7 @@ export default function HomePage() {
             <p className={`${riskConfig.color.replace('text-', 'text-').replace('-600', '-700')} mb-6`}>
               {riskConfig.message}
             </p>
-            {USER_ASSESSMENT.riskScore >= 70 ? (
+            {riskScore >= 70 ? (
               <Button className={`w-full ${riskConfig.buttonColor} text-white font-semibold py-4 px-6 rounded-2xl text-lg mb-4`}>
                 Call +65 xxxx for immediate assistance!
               </Button>
@@ -196,11 +233,11 @@ export default function HomePage() {
         <div className={`grid grid-cols-2 gap-4 mb-8 transform transition-all duration-1000 delay-600 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
           <div className="bg-white rounded-2xl p-4 border border-gray-200">
             <p className="text-sm text-gray-600">Last Assessment</p>
-            <p className="text-lg font-bold text-gray-900">{USER_ASSESSMENT.lastAssessment}</p>
+            <p className="text-lg font-bold text-gray-900">{assessmentData?.lastAssessment || 'No assessment yet'}</p>
           </div>
           <div className="bg-white rounded-2xl p-4 border border-gray-200">
             <p className="text-sm text-gray-600">Overall Score</p>
-            <p className={`text-lg font-bold ${riskConfig.color}`}>{USER_ASSESSMENT.riskScore}/100</p>
+            <p className={`text-lg font-bold ${riskConfig.color}`}>{riskScore}/100</p>
           </div>
         </div>
       </div>

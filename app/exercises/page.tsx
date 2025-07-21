@@ -85,6 +85,37 @@ export default function ExercisesPage() {
         <div className="space-y-6">
           {COGNITIVE_EXERCISES.map((exercise, index) => {
             const IconComponent = exercise.icon;
+            const isImplemented = exercise.id === 'memory-game';
+            
+            const cardContent = (
+              <Card className={`p-6 rounded-3xl border-2 ${exercise.color} ${isImplemented ? 'hover:shadow-lg transition-shadow cursor-pointer' : 'opacity-75'}`}>
+                <div className="flex items-start space-x-4">
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {exercise.title}
+                      </h3>
+                      {!isImplemented && (
+                        <span className="px-3 py-1 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                          Coming Soon
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-600 text-base leading-relaxed">
+                      {exercise.description}
+                    </p>
+                  </div>
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0">
+                    <img
+                      src={exercise.image}
+                      alt={exercise.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              </Card>
+            );
+            
             return (
               <div
                 key={exercise.id}
@@ -92,25 +123,13 @@ export default function ExercisesPage() {
                   isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
                 }`}
               >
-                <Card className={`p-6 rounded-3xl border-2 ${exercise.color} hover:shadow-lg transition-shadow cursor-pointer`}>
-                  <div className="flex items-start space-x-4">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-gray-900 mb-3">
-                        {exercise.title}
-                      </h3>
-                      <p className="text-gray-600 text-base leading-relaxed">
-                        {exercise.description}
-                      </p>
-                    </div>
-                    <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0">
-                      <img
-                        src={exercise.image}
-                        alt={exercise.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-                </Card>
+                {isImplemented ? (
+                  <Link href={`/exercises/${exercise.id}`}>
+                    {cardContent}
+                  </Link>
+                ) : (
+                  cardContent
+                )}
               </div>
             );
           })}

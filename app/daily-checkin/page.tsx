@@ -10,6 +10,8 @@ import { FaceDetection } from '@/components/ai/FaceDetection';
 import { SpeechAnalysis } from '@/components/ai/SpeechAnalysis';
 import { MemoryTask } from '@/components/tasks/MemoryTask';
 import { EmotionExercise } from '@/components/tasks/EmotionExercise';
+import { saveAssessmentWithRiskCalculation, AssessmentResult } from '@/lib/risk-calculation';
+import { useRouter } from 'next/navigation';
 
 const TASKS = [
   { id: 'memory', title: 'Memory Exercise', component: MemoryTask },
@@ -21,13 +23,25 @@ export default function DailyCheckinPage() {
   const [currentTask, setCurrentTask] = useState(0);
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [isStarted, setIsStarted] = useState(false);
+  const [assessmentData, setAssessmentData] = useState<Partial<AssessmentResult>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const router = useRouter();
 
   const progress = ((currentTask + 1) / TASKS.length) * 100;
   const CurrentComponent = TASKS[currentTask]?.component;
 
-  const handleTaskComplete = (taskId: string, data: any) => {
+  const handleTaskComplete = async (taskId: string, data: any) => {
     if (!completedTasks.includes(taskId)) {
       setCompletedTasks([...completedTasks, taskId]);
+      
+      // Store assessment data based on task type
+      if (taskId === 'memory') {
+        setAssessmentData(prev => ({ ...prev, memoryScore: data.score || 0 }));
+      } else if (taskId === 'emotion') {
+        setAssessmentData(prev => ({ ...prev, facialScore: data.score || 0 }));
+      } else if (taskId === 'speech') {
+        setAssessmentData(prev => ({ ...prev, speechScore: data.score || 0 }));
+      }
     }
   };
 
@@ -44,6 +58,35 @@ export default function DailyCheckinPage() {
   };
 
   const isAllComplete = completedTasks.length === TASKS.length;
+
+  // Save assessment when all tasks are complete
+  useEffect(() => {
+    const saveAssessment = async () => {
+      if (isAllComplete && !isSaving && assessmentData.memoryScore !== undefined && 
+          assessmentData.speechScore !== undefined && assessmentData.facialScore !== undefined) {
+        setIsSaving(true);
+        try {
+          const fullAssessment: AssessmentResult = {
+            memoryScore: assessmentData.memoryScore,
+            speechScore: assessmentData.speechScore,
+            facialScore: assessmentData.facialScore,
+            timestamp: new Date(),
+          };
+          
+          const riskCalculation = await saveAssessmentWithRiskCalculation(fullAssessment);
+          
+          // Check if high risk and redirect accordingly
+          if (riskCalculation.riskLevel === 'high') {
+            router.push('/emergency-alert');
+          }
+        } catch (error) {
+          console.error('Error saving assessment:', error);
+        }
+      }
+    };
+    
+    saveAssessment();
+  }, [isAllComplete, assessmentData, isSaving, router]);
 
   if (!isStarted) {
     return (
@@ -186,14 +229,18 @@ export default function DailyCheckinPage() {
             Next Activity
           </Button>
         ) : (
-          <Link href="/dashboard" className="flex-1">
-            <Button 
-              disabled={!completedTasks.includes(TASKS[currentTask].id)}
-              className="senior-button w-full gradient-success border-0"
-            >
-              Complete Check-in
-            </Button>
-          </Link>
+          <Button 
+            onClick={() => {
+              if (completedTasks.includes(TASKS[currentTask].id)) {
+                // This will trigger the useEffect to save assessment
+                setCurrentTask(TASKS.length);
+              }
+            }}
+            disabled={!completedTasks.includes(TASKS[currentTask].id)}
+            className="senior-button flex-1 gradient-success border-0"
+          >
+            Complete Check-in
+          </Button>
         )}
       </div>
     </div>
