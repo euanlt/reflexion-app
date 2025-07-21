@@ -85,7 +85,7 @@ export default function ExercisesPage() {
         <div className="space-y-6">
           {COGNITIVE_EXERCISES.map((exercise, index) => {
             const IconComponent = exercise.icon;
-            const isImplemented = exercise.id === 'memory-game';
+            const isImplemented = ['memory-game', 'jigsaw-puzzles', 'sudoku'].includes(exercise.id);
             
             const cardContent = (
               <Card className={`p-6 rounded-3xl border-2 ${exercise.color} ${isImplemented ? 'hover:shadow-lg transition-shadow cursor-pointer' : 'opacity-75'}`}>
