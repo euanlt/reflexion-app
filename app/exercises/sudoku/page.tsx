@@ -180,6 +180,8 @@ export default function SudokuPage() {
   };
 
   const updateHighlights = () => {
+    if (grid.length === 0) return;
+    
     const newGrid = [...grid];
     
     // Reset all highlights
@@ -390,9 +392,6 @@ export default function SudokuPage() {
         // Selected
         "ring-2 ring-blue-500 ring-inset z-10 bg-blue-100": isSelected,
         
-        // Borders for 3x3 sections
-        "border-r-2 border-gray-600": col % 3 === 2 && col !== 8,
-        "border-b-2 border-gray-600": row % 3 === 2 && row !== 8,
       }
     );
   };
@@ -514,9 +513,9 @@ export default function SudokuPage() {
 
         {/* Sudoku Grid */}
         <div className={`mx-auto transform transition-all duration-1000 delay-200 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <Card className="p-4 bg-white/90 backdrop-blur shadow-xl">
+          <Card className="p-4 bg-white/90 backdrop-blur shadow-xl overflow-visible">
             <div 
-              className="grid grid-cols-9 gap-0 border-2 border-gray-600 bg-gray-600 mx-auto"
+              className="grid grid-cols-9 gap-0 border-2 border-black bg-gray-300 mx-auto"
               style={{ 
                 width: 'min(100%, 450px)',
                 aspectRatio: '1'
@@ -530,8 +529,10 @@ export default function SudokuPage() {
                     onClick={() => handleCellClick(rowIndex, colIndex)}
                     className={getCellClassName(rowIndex, colIndex)}
                     style={{
-                      borderRight: '1px solid #d1d5db',
-                      borderBottom: '1px solid #d1d5db',
+                      borderRight: colIndex % 3 === 2 && colIndex !== 8 ? '2px solid black' : '1px solid #d1d5db',
+                      borderBottom: rowIndex % 3 === 2 && rowIndex !== 8 ? '2px solid black' : '1px solid #d1d5db',
+                      borderLeft: colIndex % 3 === 0 && colIndex !== 0 ? '2px solid black' : 'none',
+                      borderTop: rowIndex % 3 === 0 && rowIndex !== 0 ? '2px solid black' : 'none',
                     }}
                   >
                     {cell.value !== 0 ? (
