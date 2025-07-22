@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Menu, Home, Calendar, Headphones, Puzzle, Grid3X3, Calculator } from 'lucide-react';
+import { ArrowLeft, Menu, Home, Calendar, Headphones, Puzzle, Grid3X3, Calculator, Brain } from 'lucide-react';
 import Link from 'next/link';
 
 const COGNITIVE_EXERCISES = [
@@ -81,59 +81,101 @@ export default function ExercisesPage() {
           </button>
         </div>
 
-        {/* Exercise Cards */}
-        <div className="space-y-6">
-          {COGNITIVE_EXERCISES.map((exercise, index) => {
-            const IconComponent = exercise.icon;
-            const isImplemented = ['memory-game', 'jigsaw-puzzles', 'sudoku'].includes(exercise.id);
-            
-            const cardContent = (
-              <Card className={`p-6 rounded-3xl border-2 ${exercise.color} ${isImplemented ? 'hover:shadow-lg transition-shadow cursor-pointer' : 'opacity-75'}`}>
+        {/* Content based on active tab */}
+        {activeTab === 'cognitive' ? (
+          <div className="space-y-6">
+            {COGNITIVE_EXERCISES.map((exercise, index) => {
+              const IconComponent = exercise.icon;
+              const isImplemented = ['memory-game', 'jigsaw-puzzles', 'sudoku'].includes(exercise.id);
+              
+              const cardContent = (
+                <Card className={`p-6 rounded-3xl border-2 ${exercise.color} ${isImplemented ? 'hover:shadow-lg transition-shadow cursor-pointer' : 'opacity-75'}`}>
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="text-xl font-bold text-gray-900">
+                          {exercise.title}
+                        </h3>
+                        {!isImplemented && (
+                          <span className="px-3 py-1 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
+                            Coming Soon
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-600 text-base leading-relaxed">
+                        {exercise.description}
+                      </p>
+                    </div>
+                    <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0">
+                      <img
+                        src={exercise.image}
+                        alt={exercise.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+                </Card>
+              );
+              
+              return (
+                <div
+                  key={exercise.id}
+                  className={`transform transition-all duration-1000 delay-${(index + 1) * 200} ${
+                    isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+                  }`}
+                >
+                  {isImplemented ? (
+                    <Link href={`/exercises/${exercise.id}`}>
+                      {cardContent}
+                    </Link>
+                  ) : (
+                    cardContent
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className={`transform transition-all duration-500 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+            <Link href="/moca-test">
+              <Card className="p-6 rounded-3xl border-2 bg-indigo-50 border-indigo-200 hover:shadow-lg transition-shadow cursor-pointer">
                 <div className="flex items-start space-x-4">
                   <div className="flex-1">
-                    <div className="flex items-start justify-between mb-3">
-                      <h3 className="text-xl font-bold text-gray-900">
-                        {exercise.title}
+                    <div className="flex items-center gap-3 mb-3">
+                      <Brain className="w-8 h-8 text-indigo-600" />
+                      <h3 className="text-2xl font-bold text-gray-900">
+                        Montreal Cognitive Assessment (MoCA)
                       </h3>
-                      {!isImplemented && (
-                        <span className="px-3 py-1 text-xs font-medium bg-gray-200 text-gray-600 rounded-full">
-                          Coming Soon
-                        </span>
-                      )}
                     </div>
-                    <p className="text-gray-600 text-base leading-relaxed">
-                      {exercise.description}
+                    <p className="text-gray-700 text-base leading-relaxed mb-4">
+                      A comprehensive cognitive screening tool that assesses multiple cognitive domains including memory, attention, language, and more. Takes approximately 10 minutes to complete.
                     </p>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span className="text-gray-600">30 point assessment</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span className="text-gray-600">~10 minutes</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                        <span className="text-gray-600">7 cognitive domains</span>
+                      </div>
+                    </div>
+                    <Button className="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl">
+                      Start MoCA Test
+                    </Button>
                   </div>
-                  <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0">
-                    <img
-                      src={exercise.image}
-                      alt={exercise.title}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-32 h-32 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                    <Brain className="w-16 h-16 text-white" />
                   </div>
                 </div>
               </Card>
-            );
-            
-            return (
-              <div
-                key={exercise.id}
-                className={`transform transition-all duration-1000 delay-${(index + 1) * 200} ${
-                  isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-                }`}
-              >
-                {isImplemented ? (
-                  <Link href={`/exercises/${exercise.id}`}>
-                    {cardContent}
-                  </Link>
-                ) : (
-                  cardContent
-                )}
-              </div>
-            );
-          })}
-        </div>
+            </Link>
+          </div>
+        )}
 
         {/* Back to Assessment Button */}
         <div className={`mt-8 transform transition-all duration-1000 delay-800 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>

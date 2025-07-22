@@ -1,7 +1,7 @@
 import { db, CheckInSession, saveCheckInSession, getRecentSessions } from './db';
 
 export interface AssessmentResult {
-  taskType: 'memory' | 'speech' | 'emotion';
+  taskType: 'memory' | 'speech' | 'emotion' | 'moca';
   score: number;
   data: any;
   timestamp: string;
@@ -122,7 +122,8 @@ export class AssessmentStorage {
     const weights = {
       memory: 0.4,
       speech: 0.3,
-      emotion: 0.3
+      emotion: 0.3,
+      moca: 1.0 // MoCA is a complete assessment on its own
     };
 
     let weightedSum = 0;
