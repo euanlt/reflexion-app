@@ -223,6 +223,8 @@ export default function SudokuPage() {
   };
 
   const updateFilledCells = () => {
+    if (grid.length === 0) return;
+    
     let count = 0;
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
