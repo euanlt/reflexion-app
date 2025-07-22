@@ -3,42 +3,48 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, RotateCcw, Trophy, Shuffle, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy, Sparkles, Timer, Eye, EyeOff, Grid3x3, Puzzle } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 interface PuzzlePiece {
   id: number;
   correctPosition: { x: number; y: number };
   currentPosition: { x: number; y: number };
   isPlaced: boolean;
-  rotation: number;
+  isCorrect: boolean;
+  isDragging: boolean;
 }
 
 const PUZZLE_IMAGES = [
   {
     id: 1,
-    url: 'https://images.pexels.com/photos/45201/kitty-cat-kitten-pet-45201.jpeg?auto=compress&cs=tinysrgb&w=600',
-    name: 'Cute Kitten'
+    url: 'https://images.unsplash.com/photo-1517423440428-a5a00ad493e8?w=600&h=600&fit=crop',
+    name: 'Golden Retriever',
+    difficulty: 'Easy'
   },
   {
     id: 2,
-    url: 'https://images.pexels.com/photos/356378/pexels-photo-356378.jpeg?auto=compress&cs=tinysrgb&w=600',
-    name: 'Puppy'
+    url: 'https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=600&h=600&fit=crop',
+    name: 'Colorful Parrots',
+    difficulty: 'Medium'
   },
   {
     id: 3,
-    url: 'https://images.pexels.com/photos/36717/amazing-animal-beautiful-beautifull.jpg?auto=compress&cs=tinysrgb&w=600',
-    name: 'Butterfly'
+    url: 'https://images.unsplash.com/photo-1490730141103-6cac27aaab94?w=600&h=600&fit=crop',
+    name: 'Beautiful Landscape',
+    difficulty: 'Hard'
   },
   {
     id: 4,
-    url: 'https://images.pexels.com/photos/416160/pexels-photo-416160.jpeg?auto=compress&cs=tinysrgb&w=600',
-    name: 'Flowers'
+    url: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600&h=600&fit=crop',
+    name: 'Garden Flowers',
+    difficulty: 'Easy'
   }
 ];
 
 export default function JigsawPuzzlePage() {
-  const [gridSize, setGridSize] = useState(3); // 3x3 grid
+  const [gridSize, setGridSize] = useState(3);
   const [pieces, setPieces] = useState<PuzzlePiece[]>([]);
   const [draggedPiece, setDraggedPiece] = useState<number | null>(null);
   const [isComplete, setIsComplete] = useState(false);
@@ -49,6 +55,9 @@ export default function JigsawPuzzlePage() {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
   const [pieceSize, setPieceSize] = useState(100);
+  const [moves, setMoves] = useState(0);
+  const [bestTime, setBestTime] = useState<number | null>(null);
+  const [showHint, setShowHint] = useState(false);
   
   const puzzleContainerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout>();
@@ -57,11 +66,17 @@ export default function JigsawPuzzlePage() {
     setIsLoaded(true);
     initializePuzzle();
     setStartTime(Date.now());
+    setMoves(0);
     
-    // Calculate piece size based on container
+    // Load best time
+    const key = `jigsaw-best-${selectedImage.id}-${gridSize}`;
+    const stored = localStorage.getItem(key);
+    if (stored) setBestTime(parseInt(stored));
+    
+    // Calculate piece size
     const updatePieceSize = () => {
       if (puzzleContainerRef.current) {
-        const containerWidth = puzzleContainerRef.current.offsetWidth;
+        const containerWidth = Math.min(400, window.innerWidth - 96);
         setPieceSize(Math.floor(containerWidth / gridSize) - 4);
       }
     };
@@ -92,31 +107,34 @@ export default function JigsawPuzzlePage() {
 
   const initializePuzzle = () => {
     const newPieces: PuzzlePiece[] = [];
+    const positions: { x: number; y: number }[] = [];
     
-    // Calculate piece size first
-    const containerWidth = Math.min(400, window.innerWidth - 48);
-    const calculatedPieceSize = Math.floor(containerWidth / gridSize);
-    setPieceSize(calculatedPieceSize);
+    // Create a grid of positions for pieces
+    for (let i = 0; i < gridSize * gridSize; i++) {
+      const row = Math.floor(i / gridSize);
+      const col = i % gridSize;
+      positions.push({ x: col * (pieceSize + 10), y: row * (pieceSize + 10) });
+    }
+    
+    // Shuffle positions
+    for (let i = positions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
     
     // Create pieces
     for (let row = 0; row < gridSize; row++) {
       for (let col = 0; col < gridSize; col++) {
         const id = row * gridSize + col;
-        
-        // Scatter pieces in a more organized way below the puzzle
-        const piecesPerRow = Math.floor((window.innerWidth - 48) / (calculatedPieceSize + 10));
-        const pieceRow = Math.floor(id / piecesPerRow);
-        const pieceCol = id % piecesPerRow;
-        
-        const randomX = pieceCol * (calculatedPieceSize + 10);
-        const randomY = pieceRow * (calculatedPieceSize + 10);
+        const pos = positions[id];
         
         newPieces.push({
           id,
-          correctPosition: { x: col * calculatedPieceSize, y: row * calculatedPieceSize },
-          currentPosition: { x: randomX, y: randomY },
+          correctPosition: { x: col * pieceSize, y: row * pieceSize },
+          currentPosition: pos,
           isPlaced: false,
-          rotation: 0
+          isCorrect: false,
+          isDragging: false
         });
       }
     }
@@ -127,14 +145,18 @@ export default function JigsawPuzzlePage() {
 
   const handleDragStart = (e: React.DragEvent, pieceId: number) => {
     setDraggedPiece(pieceId);
+    setPieces(prev => prev.map(p => p.id === pieceId ? { ...p, isDragging: true } : p));
     e.dataTransfer.effectAllowed = 'move';
     
-    // Create a custom drag image
-    const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
-    dragImage.style.transform = 'rotate(0deg)';
-    document.body.appendChild(dragImage);
-    e.dataTransfer.setDragImage(dragImage, pieceSize / 2, pieceSize / 2);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
+    // Add drag image effect
+    const dragImage = new Image();
+    dragImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+  };
+
+  const handleDragEnd = () => {
+    setPieces(prev => prev.map(p => ({ ...p, isDragging: false })));
+    setDraggedPiece(null);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -148,12 +170,12 @@ export default function JigsawPuzzlePage() {
     if (draggedPiece === null || !puzzleContainerRef.current) return;
     
     const container = puzzleContainerRef.current.getBoundingClientRect();
-    const x = e.clientX - container.left - pieceSize / 2;
-    const y = e.clientY - container.top - pieceSize / 2;
+    const x = e.clientX - container.left;
+    const y = e.clientY - container.top;
     
-    // Find which grid position this corresponds to
-    const col = Math.round(x / pieceSize);
-    const row = Math.round(y / pieceSize);
+    // Find closest grid position
+    const col = Math.round(x / pieceSize - 0.5);
+    const row = Math.round(y / pieceSize - 0.5);
     
     // Check if within puzzle bounds
     if (col >= 0 && col < gridSize && row >= 0 && row < gridSize) {
@@ -168,50 +190,75 @@ export default function JigsawPuzzlePage() {
         // Check if this is the correct position
         const isCorrect = row === expectedRow && col === expectedCol;
         
+        // Update piece position
+        piece.currentPosition = { 
+          x: col * pieceSize, 
+          y: row * pieceSize 
+        };
+        piece.isPlaced = true;
+        piece.isCorrect = isCorrect;
+        
+        // Count move
+        setMoves(prev => prev + 1);
+        
+        // Add animation effect for correct placement
         if (isCorrect) {
-          // Snap to exact correct position
-          piece.currentPosition = { 
-            x: expectedCol * pieceSize, 
-            y: expectedRow * pieceSize 
-          };
-          piece.isPlaced = true;
-        } else {
-          // Allow placing in wrong position but mark as not correct
-          piece.currentPosition = { 
-            x: col * pieceSize, 
-            y: row * pieceSize 
-          };
-          piece.isPlaced = false;
+          // Visual feedback for correct placement
+          const element = document.getElementById(`piece-${piece.id}`);
+          if (element) {
+            element.classList.add('animate-pulse');
+            setTimeout(() => element.classList.remove('animate-pulse'), 600);
+          }
         }
         
         setPieces(newPieces);
       }
-    } else {
-      // Dropped outside the puzzle board
-      handleDropOutside(e, draggedPiece);
     }
     
-    setDraggedPiece(null);
+    handleDragEnd();
   };
 
-  const handleDropOutside = (e: React.DragEvent, pieceId: number) => {
+  const handleDropOutside = (e: React.DragEvent) => {
     e.preventDefault();
-    setDraggedPiece(null);
+    
+    if (draggedPiece === null) return;
+    
+    // Return piece to pieces area
+    const newPieces = [...pieces];
+    const piece = newPieces.find(p => p.id === draggedPiece);
+    
+    if (piece) {
+      piece.isPlaced = false;
+      piece.isCorrect = false;
+      setPieces(newPieces);
+    }
+    
+    handleDragEnd();
   };
 
   const checkCompletion = () => {
     if (pieces.length === 0) return;
     
-    const allPlaced = pieces.every(piece => piece.isPlaced);
+    const allCorrect = pieces.every(piece => piece.isCorrect);
     
-    if (allPlaced && pieces.length === gridSize * gridSize) {
+    if (allCorrect && pieces.length === gridSize * gridSize) {
       setIsComplete(true);
+      
+      // Save best time
+      const key = `jigsaw-best-${selectedImage.id}-${gridSize}`;
+      if (!bestTime || elapsedTime < bestTime) {
+        setBestTime(elapsedTime);
+        localStorage.setItem(key, elapsedTime.toString());
+      }
     }
   };
 
   const resetPuzzle = () => {
     initializePuzzle();
     setStartTime(Date.now());
+    setElapsedTime(0);
+    setMoves(0);
+    setShowHint(false);
   };
 
   const formatTime = (seconds: number): string => {
@@ -233,45 +280,50 @@ export default function JigsawPuzzlePage() {
       backgroundImage: `url(${selectedImage.url})`,
       backgroundSize: `${gridSize * pieceSize}px ${gridSize * pieceSize}px`,
       backgroundPosition: `-${col * pieceSize}px -${row * pieceSize}px`,
-      cursor: piece.isPlaced ? 'default' : 'move',
-      transform: `rotate(${piece.rotation}deg)`,
-      transition: piece.isPlaced ? 'all 0.3s ease' : 'none',
-      border: piece.isPlaced ? '2px solid #10b981' : '2px solid #e5e7eb',
-      borderRadius: '4px',
-      boxShadow: piece.isPlaced 
-        ? '0 2px 4px rgba(0,0,0,0.1)' 
-        : '0 4px 6px rgba(0,0,0,0.2)',
-      zIndex: draggedPiece === piece.id ? 1000 : piece.isPlaced ? 1 : 2,
+      cursor: piece.isDragging ? 'grabbing' : 'grab',
+      transform: piece.isDragging ? 'scale(1.05) rotate(5deg)' : 'scale(1)',
+      transition: piece.isDragging ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      opacity: piece.isDragging ? 0.8 : 1,
+      zIndex: piece.isDragging ? 1000 : piece.isPlaced ? 1 : 2,
     };
   };
 
   if (isComplete) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6">
-        <Card className="p-8 rounded-3xl text-center max-w-md w-full">
-          <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-6" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center p-6">
+        <Card className="p-8 rounded-3xl text-center max-w-md w-full shadow-2xl bg-white/90 backdrop-blur">
+          <div className="relative">
+            <Trophy className="w-20 h-20 text-yellow-500 mx-auto mb-6 animate-bounce" />
+            <Sparkles className="w-8 h-8 text-yellow-400 absolute top-0 right-1/4 animate-pulse" />
+            <Sparkles className="w-6 h-6 text-yellow-400 absolute top-4 left-1/4 animate-pulse delay-200" />
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
             Puzzle Complete!
           </h2>
           <div className="space-y-2 mb-6">
             <p className="text-gray-600">
-              You completed the {gridSize}x{gridSize} puzzle!
+              Completed in <span className="font-bold text-purple-600">{formatTime(elapsedTime)}</span>
             </p>
-            <p className="text-3xl font-bold text-blue-600">
-              Time: {formatTime(elapsedTime)}
+            <p className="text-gray-600">
+              Total moves: <span className="font-bold text-blue-600">{moves}</span>
             </p>
+            {bestTime === elapsedTime && (
+              <p className="text-sm text-yellow-600 font-semibold mt-2">
+                🎉 New Best Time!
+              </p>
+            )}
           </div>
           <div className="space-y-4">
             <Button 
               onClick={resetPuzzle}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl text-lg font-medium"
+              className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white py-4 rounded-2xl text-lg font-medium shadow-lg transform transition hover:scale-105"
             >
               Play Again
             </Button>
             <Link href="/exercises">
               <Button 
                 variant="outline"
-                className="w-full py-4 rounded-2xl text-lg font-medium border-2"
+                className="w-full py-4 rounded-2xl text-lg font-medium border-2 hover:bg-gray-50"
               >
                 Back to Exercises
               </Button>
@@ -283,14 +335,17 @@ export default function JigsawPuzzlePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50">
       {/* Header */}
-      <div className="flex items-center justify-between p-6 bg-white border-b border-gray-200">
-        <Link href="/exercises">
+      <div className="flex items-center justify-between p-6 bg-white/80 backdrop-blur border-b border-gray-200">
+        <Link href="/exercises" className="transform transition hover:scale-110">
           <ArrowLeft className="w-6 h-6 text-gray-700" />
         </Link>
-        <h1 className="text-xl font-semibold text-gray-900">Jigsaw Puzzle</h1>
-        <button onClick={resetPuzzle}>
+        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <Puzzle className="w-6 h-6" />
+          Jigsaw Puzzle
+        </h1>
+        <button onClick={resetPuzzle} className="transform transition hover:scale-110 hover:rotate-180 duration-300">
           <RotateCcw className="w-6 h-6 text-gray-700" />
         </button>
       </div>
@@ -298,15 +353,29 @@ export default function JigsawPuzzlePage() {
       <div className="p-6">
         {/* Game Stats and Controls */}
         <div className={`flex flex-wrap justify-between items-center gap-4 mb-6 transform transition-all duration-1000 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <div className="flex gap-6">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{formatTime(elapsedTime)}</p>
-              <p className="text-sm text-gray-600">Time</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{pieces.filter(p => p.isPlaced).length}/{pieces.length}</p>
-              <p className="text-sm text-gray-600">Placed</p>
-            </div>
+          <div className="flex gap-4">
+            <Card className="px-4 py-3 bg-white/80 backdrop-blur shadow-lg">
+              <div className="text-center flex items-center gap-2">
+                <Timer className="w-4 h-4 text-gray-600" />
+                <p className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                  {formatTime(elapsedTime)}
+                </p>
+              </div>
+            </Card>
+            <Card className="px-4 py-3 bg-white/80 backdrop-blur shadow-lg">
+              <div className="text-center">
+                <p className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                  {pieces.filter(p => p.isCorrect).length}/{pieces.length}
+                </p>
+                <p className="text-xs text-gray-600">Correct</p>
+              </div>
+            </Card>
+            <Card className="px-4 py-3 bg-white/80 backdrop-blur shadow-lg">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-700">{moves}</p>
+                <p className="text-xs text-gray-600">Moves</p>
+              </div>
+            </Card>
           </div>
           
           <div className="flex gap-2">
@@ -314,156 +383,215 @@ export default function JigsawPuzzlePage() {
               onClick={() => setShowPreview(!showPreview)}
               variant="outline"
               size="sm"
+              className="hover:scale-105 transition-transform"
             >
-              {showPreview ? 'Hide' : 'Show'} Preview
+              {showPreview ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+              Preview
             </Button>
             <Button
-              onClick={() => setShowImageSelect(!showImageSelect)}
+              onClick={() => setShowHint(!showHint)}
               variant="outline"
               size="sm"
+              className="hover:scale-105 transition-transform"
             >
-              <ImageIcon className="w-4 h-4 mr-2" />
-              Change
+              <Sparkles className="w-4 h-4 mr-2" />
+              Hint
             </Button>
             <select
               value={gridSize}
               onChange={(e) => setGridSize(parseInt(e.target.value))}
-              className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm bg-white/80"
             >
-              <option value={3}>3x3</option>
-              <option value={4}>4x4</option>
-              <option value={5}>5x5</option>
+              <option value={3}>3×3</option>
+              <option value={4}>4×4</option>
+              <option value={5}>5×5</option>
             </select>
           </div>
         </div>
 
         {/* Image Selection */}
         {showImageSelect && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {PUZZLE_IMAGES.map((img) => (
-              <button
-                key={img.id}
-                onClick={() => {
-                  setSelectedImage(img);
-                  setShowImageSelect(false);
-                }}
-                className={`relative rounded-lg overflow-hidden border-2 ${
-                  selectedImage.id === img.id ? 'border-blue-500' : 'border-gray-300'
-                }`}
-              >
-                <img 
-                  src={img.url} 
-                  alt={img.name}
-                  className="w-full h-24 object-cover"
-                />
-                <p className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1">
-                  {img.name}
-                </p>
-              </button>
-            ))}
-          </div>
+          <Card className="p-4 mb-6 bg-white/80 backdrop-blur">
+            <h3 className="font-bold text-gray-900 mb-3">Choose an Image</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {PUZZLE_IMAGES.map((img) => (
+                <button
+                  key={img.id}
+                  onClick={() => {
+                    setSelectedImage(img);
+                    setShowImageSelect(false);
+                    resetPuzzle();
+                  }}
+                  className={cn(
+                    "relative rounded-lg overflow-hidden border-2 transition-all hover:scale-105",
+                    selectedImage.id === img.id ? "border-purple-500 shadow-lg" : "border-gray-300"
+                  )}
+                >
+                  <img 
+                    src={img.url} 
+                    alt={img.name}
+                    className="w-full h-24 object-cover"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                    <p className="text-white text-xs font-semibold">{img.name}</p>
+                    <p className="text-white/80 text-xs">{img.difficulty}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
         )}
 
         {/* Preview Image */}
         {showPreview && (
           <div className="mb-6 flex justify-center">
-            <img 
-              src={selectedImage.url} 
-              alt="Preview"
-              className="rounded-lg shadow-lg"
-              style={{ 
-                width: `${gridSize * 60}px`,
-                opacity: 0.7
-              }}
-            />
+            <Card className="p-2 bg-white/80 backdrop-blur shadow-xl">
+              <img 
+                src={selectedImage.url} 
+                alt="Preview"
+                className="rounded-lg"
+                style={{ 
+                  width: `${gridSize * 60}px`,
+                  height: `${gridSize * 60}px`,
+                  objectFit: 'cover'
+                }}
+              />
+            </Card>
           </div>
         )}
 
         {/* Main Game Area */}
         <div className={`mx-auto transform transition-all duration-1000 delay-200 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
-             style={{ width: 'fit-content' }}>
-          {/* Puzzle Board */}
-          <div 
-            ref={puzzleContainerRef}
-            className="relative mx-auto bg-white rounded-lg shadow-inner border-2 border-gray-300"
-            style={{ 
-              width: `${gridSize * pieceSize + 4}px`,
-              height: `${gridSize * pieceSize + 4}px`,
-            }}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-          >
-            {/* Grid lines */}
-            {Array.from({ length: gridSize - 1 }).map((_, i) => (
-              <div
-                key={`h-${i}`}
-                className="absolute bg-gray-200"
-                style={{
-                  left: 0,
-                  right: 0,
-                  top: `${(i + 1) * pieceSize}px`,
-                  height: '1px'
-                }}
-              />
-            ))}
-            {Array.from({ length: gridSize - 1 }).map((_, i) => (
-              <div
-                key={`v-${i}`}
-                className="absolute bg-gray-200"
-                style={{
-                  top: 0,
-                  bottom: 0,
-                  left: `${(i + 1) * pieceSize}px`,
-                  width: '1px'
-                }}
-              />
-            ))}
-            
-            {/* Puzzle Pieces that are placed */}
-            {pieces.filter(p => p.isPlaced).map((piece) => (
-              <div
-                key={piece.id}
-                draggable={!piece.isPlaced}
-                onDragStart={(e) => handleDragStart(e, piece.id)}
-                onDragEnd={(e) => handleDropOutside(e, piece.id)}
-                style={getPieceStyle(piece)}
-                className="hover:z-50"
-              />
-            ))}
-          </div>
+             style={{ maxWidth: '600px' }}>
           
-          {/* Unplaced Pieces Area */}
-          <div className="mt-8 p-4 bg-gray-100 rounded-lg min-h-[200px]">
-            <p className="text-sm text-gray-600 mb-4">Drag pieces from here to the puzzle board:</p>
-            <div className="relative" style={{ minHeight: `${pieceSize + 20}px` }}>
-              {pieces.filter(p => !p.isPlaced).map((piece) => (
+          {/* Puzzle Board */}
+          <Card className="p-4 bg-white/90 backdrop-blur shadow-xl mb-6">
+            <div 
+              ref={puzzleContainerRef}
+              className="relative mx-auto bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg"
+              style={{ 
+                width: `${gridSize * pieceSize}px`,
+                height: `${gridSize * pieceSize}px`,
+              }}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              {/* Grid overlay with hint */}
+              {showHint && (
+                <>
+                  {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+                    const row = Math.floor(i / gridSize);
+                    const col = i % gridSize;
+                    return (
+                      <div
+                        key={`hint-${i}`}
+                        className="absolute border border-dashed border-purple-300 bg-purple-50/20"
+                        style={{
+                          left: `${col * pieceSize}px`,
+                          top: `${row * pieceSize}px`,
+                          width: `${pieceSize}px`,
+                          height: `${pieceSize}px`,
+                        }}
+                      >
+                        <span className="absolute top-1 left-1 text-xs text-purple-400 font-semibold">
+                          {i + 1}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+              
+              {/* Placed Pieces */}
+              {pieces.filter(p => p.isPlaced).map((piece) => (
                 <div
                   key={piece.id}
+                  id={`piece-${piece.id}`}
                   draggable={true}
                   onDragStart={(e) => handleDragStart(e, piece.id)}
-                  onDragEnd={(e) => handleDropOutside(e, piece.id)}
-                  style={{
-                    ...getPieceStyle(piece),
-                    position: 'relative',
-                    display: 'inline-block',
-                    margin: '5px',
-                    left: 'auto',
-                    top: 'auto'
-                  }}
-                  className="hover:z-50 cursor-move"
+                  onDragEnd={handleDragEnd}
+                  style={getPieceStyle(piece)}
+                  className={cn(
+                    "rounded-lg shadow-lg border-2 hover:shadow-xl",
+                    piece.isCorrect 
+                      ? "border-green-400 ring-2 ring-green-400/30" 
+                      : "border-yellow-400 ring-2 ring-yellow-400/30"
+                  )}
                 />
               ))}
             </div>
-          </div>
+          </Card>
+          
+          {/* Unplaced Pieces Area */}
+          <Card className="p-4 bg-white/80 backdrop-blur">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Grid3x3 className="w-4 h-4" />
+              Puzzle Pieces
+            </h3>
+            <div 
+              className="flex flex-wrap gap-3 justify-center min-h-[120px] p-4 bg-gray-50 rounded-lg"
+              onDragOver={handleDragOver}
+              onDrop={handleDropOutside}
+            >
+              {pieces.filter(p => !p.isPlaced).map((piece, index) => (
+                <div
+                  key={piece.id}
+                  id={`piece-${piece.id}`}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, piece.id)}
+                  onDragEnd={handleDragEnd}
+                  style={{
+                    ...getPieceStyle(piece),
+                    animationDelay: `${index * 50}ms`
+                  }}
+                  className={cn(
+                    "rounded-lg shadow-lg border-2 border-gray-300 hover:shadow-xl hover:border-purple-400 cursor-grab active:cursor-grabbing",
+                    "animate-fade-in"
+                  )}
+                />
+              ))}
+              {pieces.filter(p => !p.isPlaced).length === 0 && (
+                <p className="text-gray-400 text-center w-full">
+                  All pieces are on the board!
+                </p>
+              )}
+            </div>
+          </Card>
         </div>
 
-        {/* Instructions */}
-        <div className={`mt-8 p-6 bg-purple-50 rounded-2xl transform transition-all duration-1000 delay-400 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <h3 className="font-bold text-purple-900 mb-2">How to Play:</h3>
-          <p className="text-purple-800">
-            Drag and drop the puzzle pieces onto the board. Pieces will snap into place when positioned correctly. 
-            Complete the picture by placing all pieces in their correct positions!
-          </p>
+        {/* Instructions & Best Time */}
+        <div className={`mt-8 space-y-4 max-w-2xl mx-auto transform transition-all duration-1000 delay-400 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+          <Card className="p-6 bg-white/80 backdrop-blur shadow-lg">
+            <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              How to Play
+            </h3>
+            <p className="text-gray-700 text-sm">
+              Drag puzzle pieces from the bottom area onto the board. Pieces will glow green when placed correctly. 
+              Use the preview button to see the complete image, or enable hints to see piece numbers!
+            </p>
+          </Card>
+          
+          {bestTime && (
+            <Card className="p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+              <p className="text-center text-sm">
+                <span className="text-gray-600">Best Time ({gridSize}×{gridSize}): </span>
+                <span className="font-bold text-purple-700">{formatTime(bestTime)}</span>
+              </p>
+            </Card>
+          )}
+        </div>
+
+        {/* Change Image Button */}
+        <div className="text-center mt-6">
+          <Button
+            onClick={() => setShowImageSelect(!showImageSelect)}
+            variant="outline"
+            className="hover:scale-105 transition-transform"
+          >
+            <Puzzle className="w-4 h-4 mr-2" />
+            Change Picture
+          </Button>
         </div>
       </div>
     </div>

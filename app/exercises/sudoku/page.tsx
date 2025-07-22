@@ -3,54 +3,57 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Check, X } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy, Lightbulb, Sparkles, Timer, Hash, Eraser, Brain, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 type Cell = {
   value: number;
   isFixed: boolean;
   isError: boolean;
   notes: number[];
+  isHighlighted: boolean;
+  isRelated: boolean;
 };
 
 type SudokuGrid = Cell[][];
 
-// Sudoku puzzle templates (0 represents empty cells)
-const EASY_PUZZLE = [
-  [5,3,0,0,7,0,0,0,0],
-  [6,0,0,1,9,5,0,0,0],
-  [0,9,8,0,0,0,0,6,0],
-  [8,0,0,0,6,0,0,0,3],
-  [4,0,0,8,0,3,0,0,1],
-  [7,0,0,0,2,0,0,0,6],
-  [0,6,0,0,0,0,2,8,0],
-  [0,0,0,4,1,9,0,0,5],
-  [0,0,0,0,8,0,0,7,9]
-];
-
-const MEDIUM_PUZZLE = [
-  [0,0,0,2,6,0,7,0,1],
-  [6,8,0,0,7,0,0,9,0],
-  [1,9,0,0,0,4,5,0,0],
-  [8,2,0,1,0,0,0,4,0],
-  [0,0,4,6,0,2,9,0,0],
-  [0,5,0,0,0,3,0,2,8],
-  [0,0,9,3,0,0,0,7,4],
-  [0,4,0,0,5,0,0,3,6],
-  [7,0,3,0,1,8,0,0,0]
-];
-
-const HARD_PUZZLE = [
-  [0,0,0,0,0,0,0,0,0],
-  [0,0,0,0,0,3,0,8,5],
-  [0,0,1,0,2,0,0,0,0],
-  [0,0,0,5,0,7,0,0,0],
-  [0,0,4,0,0,0,1,0,0],
-  [0,9,0,0,0,0,0,0,0],
-  [5,0,0,0,0,0,0,7,3],
-  [0,0,2,0,1,0,0,0,0],
-  [0,0,0,0,4,0,0,0,9]
-];
+// Sudoku puzzle templates
+const PUZZLES = {
+  easy: [
+    [5,3,0,0,7,0,0,0,0],
+    [6,0,0,1,9,5,0,0,0],
+    [0,9,8,0,0,0,0,6,0],
+    [8,0,0,0,6,0,0,0,3],
+    [4,0,0,8,0,3,0,0,1],
+    [7,0,0,0,2,0,0,0,6],
+    [0,6,0,0,0,0,2,8,0],
+    [0,0,0,4,1,9,0,0,5],
+    [0,0,0,0,8,0,0,7,9]
+  ],
+  medium: [
+    [0,0,0,2,6,0,7,0,1],
+    [6,8,0,0,7,0,0,9,0],
+    [1,9,0,0,0,4,5,0,0],
+    [8,2,0,1,0,0,0,4,0],
+    [0,0,4,6,0,2,9,0,0],
+    [0,5,0,0,0,3,0,2,8],
+    [0,0,9,3,0,0,0,7,4],
+    [0,4,0,0,5,0,0,3,6],
+    [7,0,3,0,1,8,0,0,0]
+  ],
+  hard: [
+    [0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,3,0,8,5],
+    [0,0,1,0,2,0,0,0,0],
+    [0,0,0,5,0,7,0,0,0],
+    [0,0,4,0,0,0,1,0,0],
+    [0,9,0,0,0,0,0,0,0],
+    [5,0,0,0,0,0,0,7,3],
+    [0,0,2,0,1,0,0,0,0],
+    [0,0,0,0,4,0,0,0,9]
+  ]
+};
 
 export default function SudokuPage() {
   const [grid, setGrid] = useState<SudokuGrid>([]);
@@ -63,6 +66,10 @@ export default function SudokuPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [highlightValue, setHighlightValue] = useState<number | null>(null);
+  const [bestTime, setBestTime] = useState<number | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [filledCells, setFilledCells] = useState(0);
   
   const timerRef = useRef<NodeJS.Timeout>();
   const solution = useRef<number[][]>([]);
@@ -70,6 +77,11 @@ export default function SudokuPage() {
   useEffect(() => {
     setIsLoaded(true);
     initializeGame();
+    
+    // Load best time
+    const key = `sudoku-best-${difficulty}`;
+    const stored = localStorage.getItem(key);
+    if (stored) setBestTime(parseInt(stored));
   }, [difficulty]);
 
   useEffect(() => {
@@ -88,22 +100,15 @@ export default function SudokuPage() {
 
   useEffect(() => {
     checkCompletion();
+    updateFilledCells();
   }, [grid]);
 
+  useEffect(() => {
+    updateHighlights();
+  }, [selectedCell, highlightValue]);
+
   const initializeGame = () => {
-    let puzzle: number[][];
-    
-    switch (difficulty) {
-      case 'easy':
-        puzzle = EASY_PUZZLE;
-        break;
-      case 'medium':
-        puzzle = MEDIUM_PUZZLE;
-        break;
-      case 'hard':
-        puzzle = HARD_PUZZLE;
-        break;
-    }
+    const puzzle = PUZZLES[difficulty];
     
     // Create deep copy of puzzle
     const newGrid: SudokuGrid = puzzle.map(row => 
@@ -111,7 +116,9 @@ export default function SudokuPage() {
         value,
         isFixed: value !== 0,
         isError: false,
-        notes: []
+        notes: [],
+        isHighlighted: false,
+        isRelated: false
       }))
     );
     
@@ -126,6 +133,9 @@ export default function SudokuPage() {
     setMistakes(0);
     setHints(3);
     setStartTime(Date.now());
+    setSelectedCell(null);
+    setHighlightValue(null);
+    setShowCelebration(false);
   };
 
   const solveSudoku = (board: number[][]): boolean => {
@@ -169,9 +179,69 @@ export default function SudokuPage() {
     return true;
   };
 
+  const updateHighlights = () => {
+    const newGrid = [...grid];
+    
+    // Reset all highlights
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        newGrid[r][c].isHighlighted = false;
+        newGrid[r][c].isRelated = false;
+      }
+    }
+    
+    // Highlight selected cell's row, column, and box
+    if (selectedCell) {
+      const { row, col } = selectedCell;
+      const boxRow = Math.floor(row / 3) * 3;
+      const boxCol = Math.floor(col / 3) * 3;
+      
+      for (let i = 0; i < 9; i++) {
+        newGrid[row][i].isRelated = true;
+        newGrid[i][col].isRelated = true;
+      }
+      
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          newGrid[boxRow + i][boxCol + j].isRelated = true;
+        }
+      }
+    }
+    
+    // Highlight cells with same value
+    if (highlightValue) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (newGrid[r][c].value === highlightValue) {
+            newGrid[r][c].isHighlighted = true;
+          }
+        }
+      }
+    }
+    
+    setGrid(newGrid);
+  };
+
+  const updateFilledCells = () => {
+    let count = 0;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (grid[r][c].value !== 0) count++;
+      }
+    }
+    setFilledCells(count);
+  };
+
   const handleCellClick = (row: number, col: number) => {
     if (grid[row][col].isFixed || isComplete) return;
     setSelectedCell({ row, col });
+    
+    // Set highlight value based on clicked cell
+    if (grid[row][col].value !== 0) {
+      setHighlightValue(grid[row][col].value);
+    } else {
+      setHighlightValue(null);
+    }
   };
 
   const handleNumberInput = (num: number) => {
@@ -193,18 +263,30 @@ export default function SudokuPage() {
         notes.sort();
       }
       newGrid[row][col].notes = notes;
+      newGrid[row][col].value = 0;
     } else {
       // Set value
+      const previousValue = newGrid[row][col].value;
       newGrid[row][col].value = num;
       newGrid[row][col].notes = [];
       
       // Check if correct
       if (num !== solution.current[row][col]) {
         newGrid[row][col].isError = true;
-        setMistakes(prev => prev + 1);
+        if (previousValue === 0) {
+          setMistakes(prev => prev + 1);
+        }
       } else {
         newGrid[row][col].isError = false;
+        // Add animation effect for correct placement
+        const element = document.getElementById(`cell-${row}-${col}`);
+        if (element) {
+          element.classList.add('animate-pulse');
+          setTimeout(() => element.classList.remove('animate-pulse'), 600);
+        }
       }
+      
+      setHighlightValue(num);
     }
     
     setGrid(newGrid);
@@ -221,6 +303,7 @@ export default function SudokuPage() {
     newGrid[row][col].isError = false;
     newGrid[row][col].notes = [];
     setGrid(newGrid);
+    setHighlightValue(null);
   };
 
   const handleHint = () => {
@@ -235,6 +318,13 @@ export default function SudokuPage() {
     newGrid[row][col].notes = [];
     setGrid(newGrid);
     setHints(prev => prev - 1);
+    
+    // Add animation
+    const element = document.getElementById(`cell-${row}-${col}`);
+    if (element) {
+      element.classList.add('animate-bounce-soft');
+      setTimeout(() => element.classList.remove('animate-bounce-soft'), 1000);
+    }
   };
 
   const checkCompletion = () => {
@@ -256,6 +346,14 @@ export default function SudokuPage() {
     
     if (isFilled && !hasErrors) {
       setIsComplete(true);
+      setShowCelebration(true);
+      
+      // Save best time
+      const key = `sudoku-best-${difficulty}`;
+      if (!bestTime || elapsedTime < bestTime) {
+        setBestTime(elapsedTime);
+        localStorage.setItem(key, elapsedTime.toString());
+      }
     }
   };
 
@@ -271,59 +369,76 @@ export default function SudokuPage() {
 
   const getCellClassName = (row: number, col: number) => {
     const cell = grid[row][col];
-    let className = 'w-full h-full flex items-center justify-center text-2xl font-bold transition-all ';
+    const isSelected = selectedCell?.row === row && selectedCell?.col === col;
     
-    if (cell.isFixed) {
-      className += 'bg-gray-100 text-gray-900 ';
-    } else if (cell.isError) {
-      className += 'bg-red-100 text-red-600 ';
-    } else if (cell.value !== 0) {
-      className += 'bg-blue-50 text-blue-600 ';
-    } else {
-      className += 'bg-white hover:bg-gray-50 ';
-    }
-    
-    if (selectedCell?.row === row && selectedCell?.col === col) {
-      className += 'ring-2 ring-blue-500 ';
-    }
-    
-    // Add thicker borders for 3x3 sections
-    if (col % 3 === 2 && col !== 8) className += 'border-r-2 border-gray-400 ';
-    if (row % 3 === 2 && row !== 8) className += 'border-b-2 border-gray-400 ';
-    
-    return className;
+    return cn(
+      "relative w-full h-full flex items-center justify-center text-2xl font-bold transition-all duration-200",
+      "hover:bg-opacity-70 cursor-pointer",
+      {
+        // Background colors
+        "bg-gray-100 text-gray-900": cell.isFixed,
+        "bg-red-100 text-red-600": cell.isError && !cell.isFixed,
+        "bg-green-100 text-green-700": cell.value !== 0 && !cell.isError && !cell.isFixed,
+        "bg-white": cell.value === 0 && !cell.isFixed,
+        
+        // Highlights
+        "bg-blue-50": cell.isRelated && !isSelected && cell.value === 0,
+        "bg-yellow-100": cell.isHighlighted && !isSelected,
+        
+        // Selected
+        "ring-2 ring-blue-500 ring-inset z-10 bg-blue-100": isSelected,
+        
+        // Borders for 3x3 sections
+        "border-r-2 border-gray-600": col % 3 === 2 && col !== 8,
+        "border-b-2 border-gray-600": row % 3 === 2 && row !== 8,
+      }
+    );
   };
 
   if (isComplete) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6">
-        <Card className="p-8 rounded-3xl text-center max-w-md w-full">
-          <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-6" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Sudoku Complete!
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center p-6">
+        <Card className="p-8 rounded-3xl text-center max-w-md w-full shadow-2xl bg-white/90 backdrop-blur">
+          <div className="relative">
+            <Trophy className="w-20 h-20 text-yellow-500 mx-auto mb-6 animate-bounce" />
+            {showCelebration && (
+              <>
+                <Sparkles className="w-8 h-8 text-yellow-400 absolute top-0 right-1/4 animate-pulse" />
+                <Sparkles className="w-6 h-6 text-yellow-400 absolute top-4 left-1/4 animate-pulse delay-200" />
+                <CheckCircle className="w-10 h-10 text-green-500 absolute -bottom-2 right-1/3 animate-bounce delay-400" />
+              </>
+            )}
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            Sudoku Master!
           </h2>
           <div className="space-y-2 mb-6">
-            <p className="text-lg text-gray-600">
-              Difficulty: <span className="font-bold capitalize">{difficulty}</span>
+            <p className="text-gray-600">
+              Difficulty: <span className="font-bold capitalize text-emerald-600">{difficulty}</span>
             </p>
-            <p className="text-3xl font-bold text-blue-600">
-              Time: {formatTime(elapsedTime)}
+            <p className="text-gray-600">
+              Time: <span className="font-bold text-blue-600">{formatTime(elapsedTime)}</span>
             </p>
-            <p className="text-lg text-gray-600">
-              Mistakes: {mistakes}
+            <p className="text-gray-600">
+              Mistakes: <span className="font-bold text-purple-600">{mistakes}</span>
             </p>
+            {bestTime === elapsedTime && (
+              <p className="text-sm text-yellow-600 font-semibold mt-2">
+                🎉 New Best Time!
+              </p>
+            )}
           </div>
           <div className="space-y-4">
             <Button 
               onClick={resetGame}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl text-lg font-medium"
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white py-4 rounded-2xl text-lg font-medium shadow-lg transform transition hover:scale-105"
             >
               New Game
             </Button>
             <Link href="/exercises">
               <Button 
                 variant="outline"
-                className="w-full py-4 rounded-2xl text-lg font-medium border-2"
+                className="w-full py-4 rounded-2xl text-lg font-medium border-2 hover:bg-gray-50"
               >
                 Back to Exercises
               </Button>
@@ -335,95 +450,115 @@ export default function SudokuPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
       {/* Header */}
-      <div className="flex items-center justify-between p-6 bg-white border-b border-gray-200">
-        <Link href="/exercises">
+      <div className="flex items-center justify-between p-6 bg-white/80 backdrop-blur border-b border-gray-200">
+        <Link href="/exercises" className="transform transition hover:scale-110">
           <ArrowLeft className="w-6 h-6 text-gray-700" />
         </Link>
-        <h1 className="text-xl font-semibold text-gray-900">Sudoku</h1>
-        <button onClick={resetGame}>
+        <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <Hash className="w-6 h-6" />
+          Sudoku
+        </h1>
+        <button onClick={resetGame} className="transform transition hover:scale-110 hover:rotate-180 duration-300">
           <RotateCcw className="w-6 h-6 text-gray-700" />
         </button>
       </div>
 
       <div className="p-6 max-w-2xl mx-auto">
         {/* Game Stats */}
-        <div className={`flex justify-between items-center mb-6 transform transition-all duration-1000 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-purple-600">{formatTime(elapsedTime)}</p>
-            <p className="text-sm text-gray-600">Time</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-red-600">{mistakes}</p>
-            <p className="text-sm text-gray-600">Mistakes</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-green-600">{hints}</p>
-            <p className="text-sm text-gray-600">Hints Left</p>
-          </div>
+        <div className={`flex justify-around items-center mb-6 transform transition-all duration-1000 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+          <Card className="px-4 py-3 bg-white/80 backdrop-blur shadow-lg">
+            <div className="text-center flex items-center gap-2">
+              <Timer className="w-4 h-4 text-gray-600" />
+              <p className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                {formatTime(elapsedTime)}
+              </p>
+            </div>
+          </Card>
+          <Card className="px-4 py-3 bg-white/80 backdrop-blur shadow-lg">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-red-600">{mistakes}</p>
+              <p className="text-xs text-gray-600">Mistakes</p>
+            </div>
+          </Card>
+          <Card className="px-4 py-3 bg-white/80 backdrop-blur shadow-lg">
+            <div className="text-center">
+              <p className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                {filledCells}/81
+              </p>
+              <p className="text-xs text-gray-600">Filled</p>
+            </div>
+          </Card>
         </div>
 
         {/* Difficulty Selection */}
         <div className={`flex gap-2 mb-6 transform transition-all duration-1000 delay-100 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <Button
-            onClick={() => setDifficulty('easy')}
-            variant={difficulty === 'easy' ? 'default' : 'outline'}
-            className="flex-1"
-          >
-            Easy
-          </Button>
-          <Button
-            onClick={() => setDifficulty('medium')}
-            variant={difficulty === 'medium' ? 'default' : 'outline'}
-            className="flex-1"
-          >
-            Medium
-          </Button>
-          <Button
-            onClick={() => setDifficulty('hard')}
-            variant={difficulty === 'hard' ? 'default' : 'outline'}
-            className="flex-1"
-          >
-            Hard
-          </Button>
+          {(['easy', 'medium', 'hard'] as const).map((level) => (
+            <Button
+              key={level}
+              onClick={() => setDifficulty(level)}
+              variant={difficulty === level ? 'default' : 'outline'}
+              className={cn(
+                "flex-1 capitalize transition-all hover:scale-105",
+                difficulty === level && "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+              )}
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              {level}
+            </Button>
+          ))}
         </div>
 
         {/* Sudoku Grid */}
         <div className={`mx-auto transform transition-all duration-1000 delay-200 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <div 
-            className="grid grid-cols-9 gap-0 border-2 border-gray-400 bg-gray-400 mx-auto"
-            style={{ 
-              width: 'min(100%, 450px)',
-              aspectRatio: '1'
-            }}
-          >
-            {grid.map((row, rowIndex) => 
-              row.map((cell, colIndex) => (
-                <button
-                  key={`${rowIndex}-${colIndex}`}
-                  onClick={() => handleCellClick(rowIndex, colIndex)}
-                  className={getCellClassName(rowIndex, colIndex)}
-                  style={{
-                    borderRight: '1px solid #e5e7eb',
-                    borderBottom: '1px solid #e5e7eb',
-                  }}
-                >
-                  {cell.value !== 0 ? (
-                    cell.value
-                  ) : (
-                    <div className="grid grid-cols-3 gap-0 w-full h-full p-1">
-                      {cell.notes.map(note => (
-                        <span key={note} className="text-xs text-gray-500">
-                          {note}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+          <Card className="p-4 bg-white/90 backdrop-blur shadow-xl">
+            <div 
+              className="grid grid-cols-9 gap-0 border-2 border-gray-600 bg-gray-600 mx-auto"
+              style={{ 
+                width: 'min(100%, 450px)',
+                aspectRatio: '1'
+              }}
+            >
+              {grid.map((row, rowIndex) => 
+                row.map((cell, colIndex) => (
+                  <button
+                    key={`${rowIndex}-${colIndex}`}
+                    id={`cell-${rowIndex}-${colIndex}`}
+                    onClick={() => handleCellClick(rowIndex, colIndex)}
+                    className={getCellClassName(rowIndex, colIndex)}
+                    style={{
+                      borderRight: '1px solid #d1d5db',
+                      borderBottom: '1px solid #d1d5db',
+                    }}
+                  >
+                    {cell.value !== 0 ? (
+                      <span className={cn(
+                        "relative z-10",
+                        cell.isFixed && "font-black"
+                      )}>
+                        {cell.value}
+                      </span>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-0 w-full h-full p-1">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                          <span 
+                            key={num} 
+                            className={cn(
+                              "text-xs leading-none flex items-center justify-center",
+                              cell.notes.includes(num) ? "text-gray-500 font-semibold" : "text-transparent"
+                            )}
+                          >
+                            {cell.notes.includes(num) ? num : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Number Input */}
@@ -434,7 +569,10 @@ export default function SudokuPage() {
                 key={num}
                 onClick={() => handleNumberInput(num)}
                 variant="outline"
-                className="text-xl font-bold h-14"
+                className={cn(
+                  "text-xl font-bold h-14 hover:scale-105 transition-transform",
+                  highlightValue === num && "bg-yellow-100 border-yellow-400"
+                )}
               >
                 {num}
               </Button>
@@ -442,9 +580,9 @@ export default function SudokuPage() {
             <Button
               onClick={handleClear}
               variant="outline"
-              className="h-14"
+              className="h-14 hover:scale-105 transition-transform hover:bg-red-50"
             >
-              <X className="w-5 h-5" />
+              <Eraser className="w-5 h-5" />
             </Button>
           </div>
         </div>
@@ -454,14 +592,18 @@ export default function SudokuPage() {
           <Button
             onClick={() => setShowNotes(!showNotes)}
             variant={showNotes ? 'default' : 'outline'}
-            className="flex-1"
+            className={cn(
+              "flex-1 transition-all hover:scale-105",
+              showNotes && "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+            )}
           >
+            <Hash className="w-4 h-4 mr-2" />
             Notes {showNotes ? 'ON' : 'OFF'}
           </Button>
           <Button
             onClick={handleHint}
             variant="outline"
-            className="flex-1"
+            className="flex-1 hover:scale-105 transition-transform"
             disabled={hints === 0 || !selectedCell}
           >
             <Lightbulb className="w-4 h-4 mr-2" />
@@ -469,13 +611,27 @@ export default function SudokuPage() {
           </Button>
         </div>
 
-        {/* Instructions */}
-        <div className={`mt-6 p-6 bg-green-50 rounded-2xl transform transition-all duration-1000 delay-500 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-          <h3 className="font-bold text-green-900 mb-2">How to Play:</h3>
-          <p className="text-green-800 text-sm">
-            Fill the grid so each row, column, and 3x3 box contains numbers 1-9 without repeating. 
-            Tap a cell and then a number to fill it. Use Notes mode to mark possibilities!
-          </p>
+        {/* Instructions & Best Time */}
+        <div className={`mt-8 space-y-4 transform transition-all duration-1000 delay-500 ${isLoaded ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+          <Card className="p-6 bg-white/80 backdrop-blur shadow-lg">
+            <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-emerald-500" />
+              How to Play
+            </h3>
+            <p className="text-gray-700 text-sm">
+              Fill the grid so each row, column, and 3×3 box contains numbers 1-9 without repeating. 
+              Tap a cell and then a number to fill it. Use Notes mode to mark possible numbers!
+            </p>
+          </Card>
+          
+          {bestTime && (
+            <Card className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200">
+              <p className="text-center text-sm">
+                <span className="text-gray-600">Best Time ({difficulty}): </span>
+                <span className="font-bold text-emerald-700">{formatTime(bestTime)}</span>
+              </p>
+            </Card>
+          )}
         </div>
       </div>
     </div>
