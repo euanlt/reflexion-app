@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Mic, Volume2, CheckCircle2, XCircle, Timer } from 'lucide-react';
+import { Mic, Volume2, CheckCircle2, XCircle, Timer, MicOff } from 'lucide-react';
+import { transcribeAudioWithAzure } from '@/lib/azure-speech-config';
 
 interface LanguageSectionProps {
   onComplete: (score: number) => void;
@@ -26,7 +27,12 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
   const [timeLeft, setTimeLeft] = useState(60);
   const [fluencyStarted, setFluencyStarted] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [transcription, setTranscription] = useState('');
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [hasPlayedSentence, setHasPlayedSentence] = useState(false);
   const timerRef = useRef<NodeJS.Timeout>();
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const sentences: Record<RepetitionTask, string> = {
     repetition1: "I only know that John is the one to help today.",
@@ -52,17 +58,188 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
       const utterance = new SpeechSynthesisUtterance(sentence);
       utterance.rate = 0.9;
       speechSynthesis.speak(utterance);
+      setHasPlayedSentence(true);
     }
   };
 
-  const handleRepetitionComplete = (task: LanguageTask, correct: boolean) => {
+  // Audio recording functions
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        
+        try {
+          const wavBlob = await convertToWav(audioBlob);
+          await transcribeAudio(wavBlob);
+        } catch (error) {
+          console.error('Audio processing error:', error);
+          setTranscription('Error processing audio. Please try again.');
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Recording error:', error);
+      alert('Unable to access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setIsTranscribing(true);
+    }
+  };
+
+  // Convert audio to WAV format
+  const convertToWav = async (audioBlob: Blob): Promise<Blob> => {
+    if (audioBlob.type === 'audio/wav') {
+      return audioBlob;
+    }
+    
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      
+      return audioBufferToWav(audioBuffer);
+    } catch (error) {
+      console.error('Audio conversion error:', error);
+      throw new Error('Failed to convert audio to WAV format');
+    }
+  };
+
+  // Convert AudioBuffer to WAV format
+  const audioBufferToWav = (audioBuffer: AudioBuffer): Blob => {
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const format = 1; // PCM
+    const bitDepth = 16;
+    
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numberOfChannels * bytesPerSample;
+    
+    const buffer = audioBuffer.getChannelData(0);
+    const dataLength = buffer.length * numberOfChannels * bytesPerSample;
+    const arrayBuffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(arrayBuffer);
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numberOfChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataLength, true);
+    
+    // Convert float samples to 16-bit PCM
+    const data = new Int16Array(arrayBuffer, 44);
+    let offset = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const sample = Math.max(-1, Math.min(1, buffer[i]));
+      data[offset++] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+    }
+    
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  };
+
+  // Transcribe audio using Azure OpenAI
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      const transcribedText = await transcribeAudioWithAzure(audioBlob);
+      setTranscription(transcribedText);
+      setIsTranscribing(false);
+    } catch (error) {
+      console.error('Transcription error:', error);
+      // Fallback for demo if API fails
+      setTranscription('Error: Unable to transcribe audio. Please try again.');
+      setIsTranscribing(false);
+    }
+  };
+
+  // Check if transcription matches the target sentence
+  const checkSentenceAccuracy = (transcribed: string, target: string): boolean => {
+    // Normalize text for comparison
+    const normalizeText = (text: string) => 
+      text.toLowerCase()
+          .replace(/[^\w\s]/g, '') // Remove punctuation
+          .replace(/\s+/g, ' ')    // Normalize whitespace
+          .trim();
+    
+    const normalizedTranscribed = normalizeText(transcribed);
+    const normalizedTarget = normalizeText(target);
+    
+    // Split into words
+    const transcribedWords = normalizedTranscribed.split(' ').filter(w => w.length > 0);
+    const targetWords = normalizedTarget.split(' ').filter(w => w.length > 0);
+    
+    // Count exact matches
+    let exactMatches = 0;
+    let positionMatches = 0;
+    
+    targetWords.forEach((targetWord, index) => {
+      // Check if word exists anywhere in transcription
+      if (transcribedWords.includes(targetWord)) {
+        exactMatches++;
+        // Check if it's in the correct position
+        if (transcribedWords[index] === targetWord) {
+          positionMatches++;
+        }
+      }
+    });
+    
+    // Calculate accuracy score
+    const wordAccuracy = exactMatches / targetWords.length;
+    const positionAccuracy = positionMatches / targetWords.length;
+    
+    // Weighted score: 70% for having the right words, 30% for correct order
+    const overallAccuracy = (wordAccuracy * 0.7) + (positionAccuracy * 0.3);
+    
+    // Consider it correct if overall accuracy is at least 80%
+    return overallAccuracy >= 0.8;
+  };
+
+  const handleRepetitionComplete = () => {
+    const currentSentence = sentences[currentTask as RepetitionTask];
+    const isCorrect = checkSentenceAccuracy(transcription, currentSentence);
+    
     const result: TaskResult = {
-      task,
-      score: correct ? 1 : 0
+      task: currentTask,
+      score: isCorrect ? 1 : 0
     };
     setResults([...results, result]);
     
-    if (task === 'repetition1') {
+    // Reset states for next task
+    setTranscription('');
+    setHasPlayedSentence(false);
+    
+    if (currentTask === 'repetition1') {
       setCurrentTask('repetition2');
     } else {
       setCurrentTask('fluency');
@@ -202,11 +379,12 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
               </h3>
               
               <div className="max-w-2xl mx-auto space-y-6">
-                <Card className="p-6 bg-gray-50">
-                  <p className="text-lg text-gray-800 italic">
-                    "{sentences[currentTask as RepetitionTask]}"
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-blue-800 text-sm">
+                    Listen carefully to the sentence, then repeat it back exactly as you heard it.
+                    Click "Play Sentence" to hear it, then use the microphone to record your repetition.
                   </p>
-                </Card>
+                </div>
                 
                 <Button
                   onClick={() => playeSentence(sentences[currentTask as RepetitionTask])}
@@ -216,30 +394,97 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
                   Play Sentence
                 </Button>
                 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-yellow-800 text-sm">
-                    After hearing the sentence, repeat it back exactly as you heard it.
-                    For this demo, click whether you repeated it correctly or not.
-                  </p>
-                </div>
-                
-                <div className="flex gap-4 justify-center">
-                  <Button
-                    onClick={() => handleRepetitionComplete(currentTask, true)}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    <CheckCircle2 className="w-5 h-5 mr-2" />
-                    I Repeated Correctly
-                  </Button>
-                  <Button
-                    onClick={() => handleRepetitionComplete(currentTask, false)}
-                    variant="outline"
-                    className="border-red-600 text-red-600 hover:bg-red-50"
-                  >
-                    <XCircle className="w-5 h-5 mr-2" />
-                    I Made Errors
-                  </Button>
-                </div>
+                {hasPlayedSentence && (
+                  <div className="space-y-4">
+                    <div className="flex justify-center">
+                      <Button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={isTranscribing}
+                        className={`px-8 py-4 text-lg ${
+                          isRecording 
+                            ? 'bg-red-600 hover:bg-red-700' 
+                            : 'bg-green-600 hover:bg-green-700'
+                        } text-white`}
+                      >
+                        {isRecording ? (
+                          <>
+                            <MicOff className="w-6 h-6 mr-2" />
+                            Stop Recording
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="w-6 h-6 mr-2" />
+                            Start Recording
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    
+                    {isRecording && (
+                      <div className="text-center">
+                        <div className="inline-flex items-center gap-2 text-red-600">
+                          <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse"></div>
+                          <span className="font-medium">Recording... Speak now</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {isTranscribing && (
+                      <div className="text-center">
+                        <div className="inline-flex items-center gap-2 text-blue-600">
+                          <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                          <span className="font-medium">Processing audio...</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {transcription && !isTranscribing && (
+                      <Card className="p-4 bg-gray-50">
+                        <h4 className="font-semibold text-gray-900 mb-2">Your Recording:</h4>
+                        <p className="text-gray-700 italic mb-3">"{transcription}"</p>
+                        
+                        {/* Show accuracy indicator */}
+                        {(() => {
+                          const isAccurate = checkSentenceAccuracy(
+                            transcription, 
+                            sentences[currentTask as RepetitionTask]
+                          );
+                          return (
+                            <div className={`mb-4 p-3 rounded-lg ${
+                              isAccurate ? 'bg-green-100 border border-green-200' : 'bg-yellow-100 border border-yellow-200'
+                            }`}>
+                              <p className={`text-sm font-medium ${
+                                isAccurate ? 'text-green-800' : 'text-yellow-800'
+                              }`}>
+                                {isAccurate 
+                                  ? '✓ Good repetition! The key words and structure are correct.'
+                                  : '⚠ Some differences detected. You can try again or continue.'}
+                              </p>
+                            </div>
+                          );
+                        })()}
+                        
+                        <div className="mt-4 flex gap-4 justify-center">
+                          <Button
+                            onClick={handleRepetitionComplete}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            Continue to Next
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setTranscription('');
+                              setHasPlayedSentence(true);
+                            }}
+                            variant="outline"
+                          >
+                            Try Again
+                          </Button>
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
