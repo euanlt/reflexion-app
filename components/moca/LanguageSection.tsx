@@ -8,7 +8,8 @@ interface LanguageSectionProps {
   onNavigate: (direction: 'next' | 'previous') => void;
 }
 
-type LanguageTask = 'repetition1' | 'repetition2' | 'fluency';
+type RepetitionTask = 'repetition1' | 'repetition2';
+type LanguageTask = RepetitionTask | 'fluency';
 
 interface TaskResult {
   task: LanguageTask;
@@ -27,7 +28,7 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
   const [isComplete, setIsComplete] = useState(false);
   const timerRef = useRef<NodeJS.Timeout>();
 
-  const sentences = {
+  const sentences: Record<RepetitionTask, string> = {
     repetition1: "I only know that John is the one to help today.",
     repetition2: "The cat always hid under the couch when dogs were in the room."
   };
@@ -203,12 +204,12 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
               <div className="max-w-2xl mx-auto space-y-6">
                 <Card className="p-6 bg-gray-50">
                   <p className="text-lg text-gray-800 italic">
-                    "{sentences[currentTask as keyof typeof sentences]}"
+                    "{sentences[currentTask as RepetitionTask]}"
                   </p>
                 </Card>
                 
                 <Button
-                  onClick={() => playeSentence(sentences[currentTask as keyof typeof sentences])}
+                  onClick={() => playeSentence(sentences[currentTask as RepetitionTask])}
                   className="w-full max-w-sm mx-auto bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Volume2 className="w-5 h-5 mr-2" />

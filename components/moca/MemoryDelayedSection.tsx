@@ -72,7 +72,7 @@ export function MemoryDelayedSection({ memoryWords, onComplete, onNavigate }: Me
 
     if (unrecalledWords.length > 0) {
       const hintWord = unrecalledWords[0];
-      return `Hint: One word was a ${categories[hintWord] || 'word'}`;
+      return `Hint: One word was a ${categories[hintWord as keyof typeof categories] || 'word'}`;
     }
     return '';
   };
