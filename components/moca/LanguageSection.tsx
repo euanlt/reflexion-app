@@ -203,12 +203,12 @@ export function LanguageSection({ onComplete, onNavigate }: LanguageSectionProps
               <div className="max-w-2xl mx-auto space-y-6">
                 <Card className="p-6 bg-gray-50">
                   <p className="text-lg text-gray-800 italic">
-                    "{sentences[currentTask]}"
+                    "{sentences[currentTask as keyof typeof sentences]}"
                   </p>
                 </Card>
                 
                 <Button
-                  onClick={() => playeSentence(sentences[currentTask])}
+                  onClick={() => playeSentence(sentences[currentTask as keyof typeof sentences])}
                   className="w-full max-w-sm mx-auto bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <Volume2 className="w-5 h-5 mr-2" />
