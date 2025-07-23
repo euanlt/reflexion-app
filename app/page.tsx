@@ -1,17 +1,16 @@
 "use client";
 
-"use client";
-
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Menu, Home, Calendar, Headphones, TrendingUp, AlertTriangle, CheckCircle, Brain, Heart, BarChart3, Users, Camera, Mic } from 'lucide-react';
+import { Menu, AlertTriangle, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import { EmergencyNotificationSystem } from '@/components/emergency/EmergencyNotificationSystem';
 import { PerformanceMonitor } from '@/components/performance/PerformanceMonitor';
 import { useAccessibility } from '@/components/accessibility/AccessibilityProvider';
 import { getLatestRiskScore } from '@/lib/risk-calculation';
 import { getAssessmentHistory } from '@/lib/assessment-storage';
+import { AppShell } from '@/components/layout/AppShell';
 
 const getRiskConfig = (score: number) => {
   if (score <= 30) {
@@ -114,7 +113,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <AppShell>
       {/* Header */}
       <div className="flex items-center justify-between p-6 bg-white">
         <Menu className="w-6 h-6 text-gray-700" />
@@ -241,23 +240,8 @@ export default function HomePage() {
           </div>
         </div>
       </div>
-
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-around">
-          <Link href="/" aria-label="Home">
-            <Home className="w-6 h-6 text-gray-900" />
-          </Link>
-          <Link href="/daily-checkin" aria-label="Daily Check-in">
-            <Calendar className="w-6 h-6 text-gray-400" />
-          </Link>
-          <Link href="/exercises" aria-label="Exercises">
-            <Headphones className="w-6 h-6 text-gray-400" />
-          </Link>
-        </div>
-      </div>
       
       <PerformanceMonitor />
-    </div>
+    </AppShell>
   );
 }
