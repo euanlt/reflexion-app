@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Brain, Calendar, CheckCircle, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Brain, Calendar, CheckCircle, ClipboardList, Activity } from 'lucide-react';
 
 export default function DailyCheckinPage() {
   const router = useRouter();
@@ -117,6 +117,39 @@ export default function DailyCheckinPage() {
                 </div>
                 <Button className="mt-4 bg-gray-400 hover:bg-gray-500 text-white" disabled>
                   Coming Soon
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Movement Analysis Card */}
+          <Card 
+            className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-orange-400"
+            onClick={() => router.push('/movement-analysis')}
+          >
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-orange-100 rounded-xl">
+                <Activity className="w-8 h-8 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  Movement Analysis
+                </h2>
+                <p className="text-gray-600 mb-4">
+                  Video-based assessment of motor skills, coordination, and movement patterns
+                </p>
+                <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <ClipboardList className="w-4 h-4" />
+                    20 points
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    ~5 minutes
+                  </span>
+                </div>
+                <Button className="mt-4 bg-orange-600 hover:bg-orange-700 text-white">
+                  Start Movement Analysis
                 </Button>
               </div>
             </div>
