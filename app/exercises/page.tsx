@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ArrowLeft, Menu, Home, Calendar, Headphones, Puzzle, Grid3X3, Calculator, Brain } from 'lucide-react';
+import { ArrowLeft, Menu, Puzzle, Grid3X3, Calculator, Brain } from 'lucide-react';
 import Link from 'next/link';
+import { AppShell } from '@/components/layout/AppShell';
 
 const COGNITIVE_EXERCISES = [
   {
@@ -42,7 +43,7 @@ export default function ExercisesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <AppShell>
       {/* Header */}
       <div className="flex items-center justify-between p-6 bg-white">
         <Menu className="w-6 h-6 text-gray-700" />
@@ -190,15 +191,6 @@ export default function ExercisesPage() {
           </Link>
         </div>
       </div>
-
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-around">
-          <Home className="w-6 h-6 text-gray-900" />
-          <Calendar className="w-6 h-6 text-gray-400" />
-          <Headphones className="w-6 h-6 text-gray-400" />
-        </div>
-      </div>
-    </div>
+    </AppShell>
   );
 }
