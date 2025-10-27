@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { 
   Activity, 
   Brain, 
@@ -13,7 +14,10 @@ import {
   CheckCircle2,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Cloud,
+  CloudOff,
+  Loader2
 } from 'lucide-react'
 
 export interface MovementAnalysis {
@@ -56,9 +60,16 @@ export interface VideoAnalysisResults {
 interface VideoAnalysisResultsProps {
   results: VideoAnalysisResults
   showDetails?: boolean
+  cloudSyncStatus?: 'idle' | 'saving' | 'saved' | 'error'
+  onSaveToCloud?: () => void
 }
 
-export function VideoAnalysisResults({ results, showDetails = true }: VideoAnalysisResultsProps) {
+export function VideoAnalysisResults({ 
+  results, 
+  showDetails = true,
+  cloudSyncStatus = 'idle',
+  onSaveToCloud 
+}: VideoAnalysisResultsProps) {
   const getRiskColor = (level: string) => {
     switch (level) {
       case 'low': return 'text-green-600'
@@ -80,6 +91,34 @@ export function VideoAnalysisResults({ results, showDetails = true }: VideoAnaly
     return <TrendingDown className="h-4 w-4 text-red-600" />
   }
 
+  const getCloudStatusBadge = () => {
+    switch (cloudSyncStatus) {
+      case 'saved':
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            <Cloud className="h-3 w-3 mr-1" />
+            Saved to Cloud
+          </Badge>
+        )
+      case 'saving':
+        return (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            Saving...
+          </Badge>
+        )
+      case 'error':
+        return (
+          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+            <CloudOff className="h-3 w-3 mr-1" />
+            Save Failed
+          </Badge>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -89,9 +128,12 @@ export function VideoAnalysisResults({ results, showDetails = true }: VideoAnaly
               <Brain className="h-5 w-5" />
               Video Analysis Results
             </span>
-            <Badge variant={results.riskLevel === 'low' ? 'default' : results.riskLevel === 'moderate' ? 'secondary' : 'destructive'}>
-              {results.riskLevel.toUpperCase()} RISK
-            </Badge>
+            <div className="flex items-center gap-2">
+              {getCloudStatusBadge()}
+              <Badge variant={results.riskLevel === 'low' ? 'default' : results.riskLevel === 'moderate' ? 'secondary' : 'destructive'}>
+                {results.riskLevel.toUpperCase()} RISK
+              </Badge>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -104,6 +146,34 @@ export function VideoAnalysisResults({ results, showDetails = true }: VideoAnaly
               </div>
               <p className="text-sm text-muted-foreground">Overall Assessment Score</p>
             </div>
+
+            {onSaveToCloud && cloudSyncStatus !== 'saved' && (
+              <div className="flex justify-center">
+                <Button
+                  onClick={onSaveToCloud}
+                  disabled={cloudSyncStatus === 'saving'}
+                  className="w-full max-w-sm"
+                  variant={cloudSyncStatus === 'error' ? 'destructive' : 'default'}
+                >
+                  {cloudSyncStatus === 'saving' ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving to Huawei Cloud...
+                    </>
+                  ) : cloudSyncStatus === 'error' ? (
+                    <>
+                      <CloudOff className="mr-2 h-4 w-4" />
+                      Retry Save to Cloud
+                    </>
+                  ) : (
+                    <>
+                      <Cloud className="mr-2 h-4 w-4" />
+                      Save to Huawei Cloud
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
 
             {showDetails && (
               <>

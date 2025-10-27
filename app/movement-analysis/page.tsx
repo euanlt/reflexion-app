@@ -10,8 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Activity, FileVideo, Brain } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { movementStorageService } from '@/lib/services/movement-storage.service'
+import { toast } from 'sonner'
 
 type AssessmentStep = 'instructions' | 'recording' | 'review' | 'analysis'
+type CloudSyncStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 const movementTasks = [
   {
@@ -59,6 +62,8 @@ export default function MovementAnalysisPage() {
   const [recordedVideo, setRecordedVideo] = useState<Blob | null>(null)
   const [analysisResults, setAnalysisResults] = useState<ReturnType<typeof generateMockAnalysis> | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>('idle')
+  const [savedAnalysisId, setSavedAnalysisId] = useState<number | null>(null)
 
   const handleRecordingComplete = (videoBlob: Blob) => {
     setRecordedVideo(videoBlob)
@@ -78,10 +83,40 @@ export default function MovementAnalysisPage() {
     setCurrentStep('analysis')
   }
 
+  const handleSaveToCloud = async () => {
+    if (!recordedVideo || !analysisResults) {
+      toast.error('No video or analysis results to save')
+      return
+    }
+
+    setCloudSyncStatus('saving')
+    toast.info('Saving to Huawei Cloud...')
+
+    try {
+      const result = await movementStorageService.saveMovementAnalysis({
+        videoBlob: recordedVideo,
+        analysisResults,
+        taskType: selectedTask.id as any,
+        videoDuration: selectedTask.duration,
+        userId: 'user-' + Math.random().toString(36).substr(2, 9), // In production, use actual user ID
+      })
+
+      setSavedAnalysisId(result.localId)
+      setCloudSyncStatus('saved')
+      toast.success('Successfully saved to cloud!')
+    } catch (error) {
+      console.error('Error saving to cloud:', error)
+      setCloudSyncStatus('error')
+      toast.error(error instanceof Error ? error.message : 'Failed to save to cloud')
+    }
+  }
+
   const startNewRecording = () => {
     setRecordedVideo(null)
     setAnalysisResults(null)
     setCurrentStep('instructions')
+    setCloudSyncStatus('idle')
+    setSavedAnalysisId(null)
   }
 
   return (
@@ -223,7 +258,11 @@ export default function MovementAnalysisPage() {
 
       {currentStep === 'analysis' && analysisResults && recordedVideo && (
         <div className="space-y-6">
-          <VideoAnalysisResults results={analysisResults} />
+          <VideoAnalysisResults 
+            results={analysisResults}
+            cloudSyncStatus={cloudSyncStatus}
+            onSaveToCloud={handleSaveToCloud}
+          />
           
           <Card>
             <CardHeader>

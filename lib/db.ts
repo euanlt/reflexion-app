@@ -50,6 +50,12 @@ export interface VideoAssessment {
   };
   recordedAt: string;
   analyzedAt?: string;
+  // Huawei Cloud OBS references
+  obsVideoKey?: string;
+  obsResultsKey?: string;
+  cloudSyncStatus?: 'pending' | 'uploading' | 'synced' | 'failed';
+  cloudSyncedAt?: string;
+  userId?: string;
 }
 
 export interface UserProfile {
@@ -84,6 +90,11 @@ export class ReflexionDB extends Dexie {
       checkInSessions: '++id, date, overallScore, completedAt',
       userProfile: '++id, name, age',
       videoAssessments: '++id, sessionId, taskType, recordedAt, analyzedAt'
+    });
+    this.version(3).stores({
+      checkInSessions: '++id, date, overallScore, completedAt',
+      userProfile: '++id, name, age',
+      videoAssessments: '++id, sessionId, taskType, recordedAt, analyzedAt, cloudSyncStatus, userId, obsVideoKey'
     });
   }
 }
@@ -147,4 +158,28 @@ export const updateVideoAssessmentAnalysis = async (
     analysisResults,
     analyzedAt: new Date().toISOString()
   });
+};
+
+// OBS-related functions
+export const updateVideoAssessmentCloudSync = async (
+  id: number,
+  obsVideoKey: string,
+  obsResultsKey: string
+) => {
+  return await db.videoAssessments.update(id, {
+    obsVideoKey,
+    obsResultsKey,
+    cloudSyncStatus: 'synced',
+    cloudSyncedAt: new Date().toISOString()
+  });
+};
+
+export const getVideoAssessmentsByCloudStatus = async (status: VideoAssessment['cloudSyncStatus']) => {
+  if (!status) {
+    return [];
+  }
+  return await db.videoAssessments
+    .where('cloudSyncStatus')
+    .equals(status)
+    .toArray();
 };

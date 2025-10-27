@@ -15,7 +15,8 @@ docs/
 ├── frs.md             # Functional Requirements Specification
 ├── deployment.md      # Deployment and infrastructure guide
 ├── testing.md         # Testing strategy and procedures
-└── maintenance.md     # Ongoing maintenance and support
+├── maintenance.md     # Ongoing maintenance and support
+└── huawei-cloud-setup.md # Huawei Cloud OBS setup guide
 ```
 
 ## Quick Start
@@ -23,7 +24,7 @@ docs/
 1. **For Developers**: Start with [Architecture](docs/architecture.md) → [FRS](docs/frs.md) → [Tasks](docs/task.md)
 2. **For Project Managers**: Start with [Planning](docs/planning.md) → [Tasks](docs/task.md) → [Architecture](docs/architecture.md)
 3. **For QA/Testing**: Start with [FRS](docs/frs.md) → [Testing](docs/testing.md) → [Tasks](docs/task.md)
-4. **For DevOps**: Start with [Architecture](docs/architecture.md) → [Deployment](docs/deployment.md)
+4. **For DevOps**: Start with [Architecture](docs/architecture.md) → [Deployment](docs/deployment.md) → [Huawei Cloud Setup](docs/huawei-cloud-setup.md)
 
 ## Current Project Status
 
@@ -47,13 +48,42 @@ docs/
 - **UI Framework**: Tailwind CSS, shadcn/ui
 - **AI/ML**: TensorFlow.js, Face Detection API
 - **Database**: Dexie (IndexedDB), Supabase (planned)
+- **Cloud Storage**: Huawei Cloud OBS (Object Storage Service)
 - **Charts**: Recharts
 - **PWA**: Next.js PWA capabilities
+- **Deployment**: Vercel
 
 ## Getting Started
 
+### Prerequisites
+
+- Node.js 18.x or higher
+- npm 9.x or higher
+- Huawei Cloud account (for movement analysis cloud storage)
+
+### Installation
+
 ```bash
 npm install
+```
+
+### Environment Configuration
+
+Create a `.env.local` file in the root directory:
+
+```bash
+# Huawei Cloud OBS Configuration (required for movement analysis)
+HUAWEI_OBS_ACCESS_KEY_ID=your_access_key_id
+HUAWEI_OBS_SECRET_ACCESS_KEY=your_secret_access_key
+HUAWEI_OBS_ENDPOINT=obs.ap-southeast-1.myhuaweicloud.com
+HUAWEI_OBS_BUCKET_NAME=your_bucket_name
+```
+
+See [Huawei Cloud Setup Guide](docs/huawei-cloud-setup.md) for detailed instructions.
+
+### Run Development Server
+
+```bash
 npm run dev
 ```
 

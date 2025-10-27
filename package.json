@@ -52,6 +52,7 @@
     "dexie": "^4.0.11",
     "embla-carousel-react": "^8.3.0",
     "encoding": "^0.1.13",
+    "esdk-obs-nodejs": "^3.25.6",
     "eslint": "8.49.0",
     "eslint-config-next": "13.5.1",
     "input-otp": "^1.2.4",
