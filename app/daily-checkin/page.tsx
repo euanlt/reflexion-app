@@ -90,8 +90,11 @@ export default function DailyCheckinPage() {
             </div>
           </Card>
 
-          {/* Speech Analysis Card */}
-          <Card className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-purple-400">
+          {/* Conversation Analysis Card */}
+          <Card 
+            className="p-6 hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-purple-400"
+            onClick={() => router.push('/conversation-analysis')}
+          >
             <div className="flex items-start gap-4">
               <div className="p-3 bg-purple-100 rounded-xl">
                 <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,23 +103,23 @@ export default function DailyCheckinPage() {
               </div>
               <div className="flex-1">
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Speech Analysis
+                  Conversation Analysis
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  Voice-based assessment analyzing speech patterns and fluency
+                  Natural conversation for passive cognitive monitoring through speech patterns and memory
                 </p>
                 <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span className="flex items-center gap-1">
                     <ClipboardList className="w-4 h-4" />
-                    15 points
+                    Comprehensive
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    ~5 minutes
+                    3-5 minutes
                   </span>
                 </div>
-                <Button className="mt-4 bg-gray-400 hover:bg-gray-500 text-white" disabled>
-                  Coming Soon
+                <Button className="mt-4 bg-purple-600 hover:bg-purple-700 text-white">
+                  Start Conversation
                 </Button>
               </div>
             </div>

@@ -89,6 +89,8 @@ export default function ConversationAnalysisPage() {
   const audioChunksRef = useRef<Blob[]>([])
   const videoChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   const startRecording = async () => {
     try {
@@ -101,6 +103,15 @@ export default function ConversationAnalysisPage() {
           facingMode: 'user'
         }
       })
+
+      // Store stream reference
+      streamRef.current = stream
+
+      // Display video preview
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+      }
 
       // Create separate recorders for audio and video
       const audioStream = new MediaStream(stream.getAudioTracks())
@@ -137,7 +148,15 @@ export default function ConversationAnalysisPage() {
       videoRecorder.onstop = () => {
         const videoBlob = new Blob(videoChunksRef.current, { type: 'video/webm' })
         setVideoBlob(videoBlob)
+        
+        // Stop video preview
+        if (videoRef.current) {
+          videoRef.current.srcObject = null
+        }
+        
+        // Stop all tracks
         stream.getTracks().forEach(track => track.stop())
+        streamRef.current = null
       }
 
       mediaRecorderRef.current = videoRecorder
@@ -310,30 +329,43 @@ export default function ConversationAnalysisPage() {
               <CardDescription>Speak naturally and take your time</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-muted p-6 rounded-lg text-center">
-                <p className="text-3xl font-bold mb-2">
-                  {formatTime(recordedTime)} / {formatTime(selectedType.duration)}
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">Time elapsed</p>
-                
-                <div className="bg-background p-4 rounded-lg mb-4">
-                  <p className="text-sm font-medium mb-2">Remember the prompt:</p>
-                  <p className="text-sm italic">"{selectedType.prompt}"</p>
+              {/* Video Preview */}
+              <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
+                  <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                  REC
                 </div>
-                
-                <div className="flex gap-2 justify-center">
-                  <Button
-                    onClick={stopRecording}
-                    variant="destructive"
-                    size="lg"
-                  >
-                    Stop Recording
-                  </Button>
+                <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1 rounded-lg text-sm font-medium">
+                  {formatTime(recordedTime)} / {formatTime(selectedType.duration)}
                 </div>
               </div>
               
+              <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm font-medium mb-2 text-center">Remember the prompt:</p>
+                <p className="text-sm italic text-center">"{selectedType.prompt}"</p>
+              </div>
+              
+              <div className="flex gap-2 justify-center">
+                <Button
+                  onClick={stopRecording}
+                  variant="destructive"
+                  size="lg"
+                  className="min-w-[200px]"
+                >
+                  <Pause className="mr-2 h-5 w-5" />
+                  Stop Recording
+                </Button>
+              </div>
+              
               <div className="text-center text-sm text-muted-foreground">
-                🎤 Audio and video are being recorded
+                🎤 Audio and video are being recorded for analysis
               </div>
             </CardContent>
           </Card>
