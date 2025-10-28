@@ -84,6 +84,7 @@ export default function ConversationAnalysisPage() {
   const [transcript, setTranscript] = useState('')
   const [analysisResults, setAnalysisResults] = useState<ConversationAssessment['analysisResults'] | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isCameraLoading, setIsCameraLoading] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -94,6 +95,8 @@ export default function ConversationAnalysisPage() {
 
   const startRecording = async () => {
     try {
+      setIsCameraLoading(true)
+      
       // Request audio and video permissions
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
@@ -110,8 +113,10 @@ export default function ConversationAnalysisPage() {
       // Display video preview
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        videoRef.current.play()
+        await videoRef.current.play()
       }
+      
+      setIsCameraLoading(false)
 
       // Create separate recorders for audio and video
       const audioStream = new MediaStream(stream.getAudioTracks())
@@ -182,7 +187,8 @@ export default function ConversationAnalysisPage() {
       toast.success('Recording started')
     } catch (error) {
       console.error('Error starting recording:', error)
-      toast.error('Failed to start recording. Please check permissions.')
+      setIsCameraLoading(false)
+      toast.error('Failed to start recording. Please check camera/microphone permissions.')
     }
   }
 
@@ -330,21 +336,34 @@ export default function ConversationAnalysisPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Video Preview */}
-              <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+              <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
+                {isCameraLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-20">
+                    <div className="text-center text-white">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                      <p>Starting camera...</p>
+                    </div>
+                  </div>
+                )}
                 <video
                   ref={videoRef}
                   autoPlay
                   muted
                   playsInline
                   className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
                 />
-                <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full flex items-center gap-2 text-sm font-medium">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                  REC
-                </div>
-                <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1 rounded-lg text-sm font-medium">
-                  {formatTime(recordedTime)} / {formatTime(selectedType.duration)}
-                </div>
+                {!isCameraLoading && (
+                  <>
+                    <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full flex items-center gap-2 text-sm font-medium shadow-lg z-10">
+                      <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                      REC
+                    </div>
+                    <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm font-medium shadow-lg z-10">
+                      {formatTime(recordedTime)} / {formatTime(selectedType.duration)}
+                    </div>
+                  </>
+                )}
               </div>
               
               <div className="bg-muted p-4 rounded-lg">
