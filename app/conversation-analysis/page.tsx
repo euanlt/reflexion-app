@@ -353,13 +353,13 @@ export default function ConversationAnalysisPage() {
               <CardDescription>Speak naturally and take your time</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Video Preview */}
-              <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
+              {/* Mirror Video Preview */}
+              <div className="relative rounded-2xl overflow-hidden aspect-video shadow-2xl border-4 border-gray-200 bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100">
                 {isCameraLoading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-800 z-20">
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 z-20">
                     <div className="text-center text-white">
                       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                      <p>Starting camera...</p>
+                      <p className="text-sm">Initializing mirror...</p>
                     </div>
                   </div>
                 )}
@@ -372,7 +372,8 @@ export default function ConversationAnalysisPage() {
                   style={{ 
                     display: 'block',
                     objectFit: 'cover',
-                    transform: 'scaleX(-1)'
+                    transform: 'scaleX(-1)',
+                    filter: 'contrast(1.05) brightness(1.02)'
                   }}
                   onLoadedMetadata={() => console.log('Video metadata loaded')}
                   onPlay={() => console.log('Video playing')}
@@ -382,16 +383,16 @@ export default function ConversationAnalysisPage() {
                   }}
                 />
                 {!isCameraLoading && (
-                  <>
-                    <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full flex items-center gap-2 text-sm font-medium shadow-lg z-10">
-                      <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                      REC
-                    </div>
-                    <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1 rounded-lg text-sm font-medium shadow-lg z-10">
-                      {formatTime(recordedTime)} / {formatTime(selectedType.duration)}
-                    </div>
-                  </>
+                  <div className="absolute bottom-2 right-2 bg-black/50 text-white px-2 py-1 rounded text-xs font-mono backdrop-blur-sm">
+                    {formatTime(recordedTime)}
+                  </div>
                 )}
+                {/* Mirror frame effect */}
+                <div className="absolute inset-0 pointer-events-none rounded-2xl" 
+                     style={{
+                       boxShadow: 'inset 0 0 60px rgba(255,255,255,0.1), inset 0 0 20px rgba(255,255,255,0.05)'
+                     }}
+                />
               </div>
               
               <div className="bg-muted p-4 rounded-lg">
