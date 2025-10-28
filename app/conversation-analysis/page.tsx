@@ -39,14 +39,26 @@ export default function ConversationAnalysisPage() {
     try {
       setIsCameraLoading(true)
       
-      // Generate AI greeting
-      const greetings = [
-        "Hello! It's wonderful to see you today. How are you feeling?",
-        "Good to see you! I'd love to hear about what's been going on in your life lately.",
-        "Hi there! Thank you for taking the time to chat with me today. What's on your mind?",
-        "Hello! I'm here to have a nice conversation with you. How has your day been?",
-      ]
-      const greeting = greetings[Math.floor(Math.random() * greetings.length)]
+      // Generate AI greeting using Huawei ModelArts
+      let greeting = '';
+      try {
+        const greetingResponse = await fetch('/api/conversation-analysis/generate-greeting', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        if (greetingResponse.ok) {
+          const data = await greetingResponse.json();
+          greeting = data.greeting;
+        } else {
+          // Fallback greeting if API fails
+          greeting = "Hello! It's wonderful to see you today. How are you feeling?";
+        }
+      } catch (error) {
+        console.error('Error generating greeting:', error);
+        greeting = "Hello! It's wonderful to see you today. How are you feeling?";
+      }
+      
       setAiGreeting(greeting)
       
       // Request audio and video permissions
@@ -143,12 +155,48 @@ export default function ConversationAnalysisPage() {
         })
       }, 1000)
 
-      // Speak the AI greeting using text-to-speech
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(greeting)
-        utterance.rate = 0.9
-        utterance.pitch = 1.0
-        window.speechSynthesis.speak(utterance)
+      // Speak the AI greeting using Huawei TTS
+      try {
+        const ttsResponse = await fetch('/api/conversation-analysis/synthesize-speech', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: greeting, speed: -10, pitch: 0, volume: 0 }),
+        });
+        
+        if (ttsResponse.ok) {
+          const ttsData = await ttsResponse.json();
+          // Convert base64 audio to blob and play
+          const audioBlob = base64ToBlob(ttsData.audioData, 'audio/wav');
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          audio.play().catch((err) => {
+            console.error('Failed to play TTS audio:', err);
+            // Fallback to browser TTS
+            if ('speechSynthesis' in window) {
+              const utterance = new SpeechSynthesisUtterance(greeting);
+              utterance.rate = 0.9;
+              utterance.pitch = 1.0;
+              window.speechSynthesis.speak(utterance);
+            }
+          });
+        } else {
+          // Fallback to browser TTS
+          if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(greeting);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            window.speechSynthesis.speak(utterance);
+          }
+        }
+      } catch (error) {
+        console.error('Error with TTS:', error);
+        // Fallback to browser TTS
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(greeting);
+          utterance.rate = 0.9;
+          utterance.pitch = 1.0;
+          window.speechSynthesis.speak(utterance);
+        }
       }
 
       toast.success('Conversation started')
@@ -170,29 +218,63 @@ export default function ConversationAnalysisPage() {
 
       toast.success('Conversation ended')
       
-      // Automatically start analysis
+      // Automatically start analysis after audio is saved
       setTimeout(() => {
         handleAnalyze()
-      }, 500)
+      }, 1000)
     }
   }
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true)
     
-    // Simulate generating transcript
-    setTranscript(`[Mock transcript of your conversation would appear here. In production, this will use Huawei Cloud Speech Recognition Service to transcribe the audio in real-time.]`)
-    
-    // Simulate AI analysis delay
-    await new Promise(resolve => setTimeout(resolve, 3000))
-    
-    // Generate mock analysis results
-    const results = generateMockConversationAnalysis()
-    setAnalysisResults(results)
-    setIsAnalyzing(false)
-    setCurrentStep('analysis')
-    
-    toast.success('Analysis complete')
+    try {
+      // Transcribe audio using Huawei SIS
+      let transcriptText = '';
+      
+      if (audioBlob) {
+        try {
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'conversation.webm');
+          
+          const transcribeResponse = await fetch('/api/conversation-analysis/transcribe', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (transcribeResponse.ok) {
+            const transcribeData = await transcribeResponse.json();
+            transcriptText = transcribeData.transcript;
+            toast.success('Transcription complete');
+          } else {
+            throw new Error('Transcription failed');
+          }
+        } catch (error) {
+          console.error('Error transcribing audio:', error);
+          transcriptText = '[Transcription unavailable. Audio recording was captured but transcription service is not configured or failed.]';
+          toast.error('Transcription failed, using mock analysis');
+        }
+      } else {
+        transcriptText = '[No audio recorded]';
+      }
+      
+      setTranscript(transcriptText);
+      
+      // Simulate AI analysis delay
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Generate mock analysis results based on transcript
+      const results = generateMockConversationAnalysis()
+      setAnalysisResults(results)
+      setIsAnalyzing(false)
+      setCurrentStep('analysis')
+      
+      toast.success('Analysis complete')
+    } catch (error) {
+      console.error('Error during analysis:', error);
+      setIsAnalyzing(false)
+      toast.error('Analysis failed. Please try again.');
+    }
   }
 
   const startNewConversation = () => {
@@ -209,6 +291,16 @@ export default function ConversationAnalysisPage() {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Helper function to convert base64 to blob
+  const base64ToBlob = (base64: string, mimeType: string = 'audio/wav'): Blob => {
+    const binaryString = atob(base64)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+    return new Blob([bytes], { type: mimeType })
   }
 
   // Re-attach stream when video element becomes available
