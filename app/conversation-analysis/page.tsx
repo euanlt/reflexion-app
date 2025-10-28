@@ -11,73 +11,14 @@ import { generateMockConversationAnalysis } from '@/lib/ai/conversation-mock'
 import type { ConversationAssessment } from '@/lib/db'
 import { toast } from 'sonner'
 
-type AssessmentStep = 'instructions' | 'conversation' | 'review' | 'analysis'
+type AssessmentStep = 'start' | 'conversation' | 'analysis'
 
-const conversationTypes = [
-  {
-    id: 'memory-recall',
-    title: 'Memory Recall',
-    description: 'Discuss recent activities and experiences',
-    duration: 180, // 3 minutes
-    icon: '🧠',
-    prompt: 'Tell me about what you did yesterday. What did you have for breakfast? Did you meet anyone?',
-    instructions: [
-      'Think about your activities from yesterday',
-      'Speak naturally and take your time',
-      'Include as many details as you can remember',
-      'Mention specific times, places, and people',
-    ]
-  },
-  {
-    id: 'current-events',
-    title: 'Current Events',
-    description: 'Talk about recent news or happenings',
-    duration: 180,
-    icon: '📰',
-    prompt: 'What\'s something interesting in the news lately? What do you think about it?',
-    instructions: [
-      'Think about news you\'ve heard recently',
-      'Share your thoughts and opinions',
-      'Explain why it interests you',
-      'Feel free to discuss any topic',
-    ]
-  },
-  {
-    id: 'problem-solving',
-    title: 'Problem Solving',
-    description: 'Plan and organize a scenario',
-    duration: 240, // 4 minutes
-    icon: '🎯',
-    prompt: 'If you were planning a family gathering, how would you organize it? Walk me through your plan.',
-    instructions: [
-      'Think through the steps needed',
-      'Explain your reasoning',
-      'Consider different aspects (food, guests, activities)',
-      'Talk through any challenges you might face',
-    ]
-  },
-  {
-    id: 'storytelling',
-    title: 'Storytelling',
-    description: 'Share a memory from your past',
-    duration: 300, // 5 minutes
-    icon: '📖',
-    prompt: 'Tell me about a favorite memory from your childhood. What made it special?',
-    instructions: [
-      'Choose a memory that stands out to you',
-      'Describe the setting and people involved',
-      'Share how you felt during that time',
-      'Include as many details as you remember',
-    ]
-  },
-]
+const MAX_CONVERSATION_DURATION = 600 // 10 minutes max
 
 export default function ConversationAnalysisPage() {
   const router = useRouter()
-  const [currentStep, setCurrentStep] = useState<AssessmentStep>('instructions')
-  const [selectedType, setSelectedType] = useState(conversationTypes[0])
+  const [currentStep, setCurrentStep] = useState<AssessmentStep>('start')
   const [isRecording, setIsRecording] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
   const [recordedTime, setRecordedTime] = useState(0)
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null)
@@ -85,6 +26,7 @@ export default function ConversationAnalysisPage() {
   const [analysisResults, setAnalysisResults] = useState<ConversationAssessment['analysisResults'] | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isCameraLoading, setIsCameraLoading] = useState(false)
+  const [aiGreeting, setAiGreeting] = useState('')
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -96,6 +38,16 @@ export default function ConversationAnalysisPage() {
   const startRecording = async () => {
     try {
       setIsCameraLoading(true)
+      
+      // Generate AI greeting
+      const greetings = [
+        "Hello! It's wonderful to see you today. How are you feeling?",
+        "Good to see you! I'd love to hear about what's been going on in your life lately.",
+        "Hi there! Thank you for taking the time to chat with me today. What's on your mind?",
+        "Hello! I'm here to have a nice conversation with you. How has your day been?",
+      ]
+      const greeting = greetings[Math.floor(Math.random() * greetings.length)]
+      setAiGreeting(greeting)
       
       // Request audio and video permissions
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -181,17 +133,25 @@ export default function ConversationAnalysisPage() {
 
       // Start timer
       timerRef.current = setInterval(() => {
-        setRecordedTime(prev => prev + 1)
+        setRecordedTime(prev => {
+          // Auto-stop after max duration
+          if (prev >= MAX_CONVERSATION_DURATION - 1) {
+            stopRecording()
+            return prev
+          }
+          return prev + 1
+        })
       }, 1000)
 
-      // Auto-stop after duration
-      setTimeout(() => {
-        if (mediaRecorderRef.current?.state === 'recording') {
-          stopRecording()
-        }
-      }, selectedType.duration * 1000)
+      // Speak the AI greeting using text-to-speech
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(greeting)
+        utterance.rate = 0.9
+        utterance.pitch = 1.0
+        window.speechSynthesis.speak(utterance)
+      }
 
-      toast.success('Recording started')
+      toast.success('Conversation started')
     } catch (error) {
       console.error('Error starting recording:', error)
       setIsCameraLoading(false)
@@ -208,18 +168,20 @@ export default function ConversationAnalysisPage() {
         clearInterval(timerRef.current)
       }
 
-      // Simulate generating transcript (in real implementation, this would call speech-to-text API)
+      toast.success('Conversation ended')
+      
+      // Automatically start analysis
       setTimeout(() => {
-        setTranscript(`[Mock transcript of your ${selectedType.title} conversation would appear here. In production, this will use Huawei Cloud Speech Recognition Service to transcribe the audio in real-time.]`)
-        setCurrentStep('review')
-      }, 1000)
-
-      toast.success('Recording completed')
+        handleAnalyze()
+      }, 500)
     }
   }
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true)
+    
+    // Simulate generating transcript
+    setTranscript(`[Mock transcript of your conversation would appear here. In production, this will use Huawei Cloud Speech Recognition Service to transcribe the audio in real-time.]`)
     
     // Simulate AI analysis delay
     await new Promise(resolve => setTimeout(resolve, 3000))
@@ -239,7 +201,8 @@ export default function ConversationAnalysisPage() {
     setTranscript('')
     setAnalysisResults(null)
     setRecordedTime(0)
-    setCurrentStep('instructions')
+    setAiGreeting('')
+    setCurrentStep('start')
   }
 
   const formatTime = (seconds: number) => {
@@ -278,81 +241,65 @@ export default function ConversationAnalysisPage() {
         </p>
       </div>
 
-      {currentStep === 'instructions' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Select Conversation Type</CardTitle>
-            <CardDescription>
-              Choose a conversation topic for cognitive assessment
+      {currentStep === 'start' && (
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+              <MessageSquare className="h-10 w-10 text-white" />
+            </div>
+            <CardTitle className="text-2xl">AI Mirror Conversation</CardTitle>
+            <CardDescription className="text-base mt-2">
+              Have a natural conversation with your AI companion for cognitive health monitoring
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Tabs defaultValue={selectedType.id} onValueChange={(value) => {
-              const type = conversationTypes.find(t => t.id === value)
-              if (type) setSelectedType(type)
-            }}>
-              <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
-                {conversationTypes.map(type => (
-                  <TabsTrigger key={type.id} value={type.id}>
-                    <span className="mr-1">{type.icon}</span>
-                    <span className="hidden sm:inline">{type.title}</span>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {conversationTypes.map(type => (
-                <TabsContent key={type.id} value={type.id} className="space-y-4 mt-4">
-                  <div>
-                    <h3 className="font-semibold mb-2 flex items-center gap-2">
-                      <span className="text-2xl">{type.icon}</span>
-                      {type.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4">{type.description}</p>
-                    
-                    <div className="bg-muted p-4 rounded-lg mb-4">
-                      <h4 className="font-medium mb-2">Conversation Prompt:</h4>
-                      <p className="text-sm italic">"{type.prompt}"</p>
-                    </div>
+          <CardContent className="space-y-6">
+            <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <span>✨</span>
+                How it works
+              </h3>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 dark:text-blue-400 font-bold">1.</span>
+                  <span>The AI will greet you and start a friendly conversation</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 dark:text-blue-400 font-bold">2.</span>
+                  <span>Speak naturally about anything - your day, memories, thoughts</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 dark:text-blue-400 font-bold">3.</span>
+                  <span>When you're done, end the conversation to see your results</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 dark:text-blue-400 font-bold">4.</span>
+                  <span>Your speech patterns will be analyzed for cognitive health insights</span>
+                </li>
+              </ul>
+            </div>
 
-                    <div className="bg-muted/50 p-4 rounded-lg">
-                      <h4 className="font-medium mb-2">Tips:</h4>
-                      <ul className="list-disc list-inside space-y-1">
-                        {type.instructions.map((instruction, index) => (
-                          <li key={index} className="text-sm">{instruction}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <p className="text-sm text-muted-foreground mt-4">
-                      Duration: up to {Math.floor(type.duration / 60)} minutes
-                    </p>
-                  </div>
-                  
-                  <Button 
-                    onClick={startRecording}
-                    size="lg"
-                    className="w-full"
-                  >
-                    <Mic className="mr-2 h-5 w-5" />
-                    Start Conversation
-                  </Button>
-                </TabsContent>
-              ))}
-            </Tabs>
+            <div className="bg-muted/50 p-4 rounded-lg">
+              <p className="text-sm text-center">
+                💡 <strong>Tip:</strong> Find a quiet place and speak clearly. The conversation can last up to {Math.floor(MAX_CONVERSATION_DURATION / 60)} minutes.
+              </p>
+            </div>
+            
+            <Button 
+              onClick={startRecording}
+              size="lg"
+              className="w-full text-lg h-14 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              <Mic className="mr-2 h-6 w-6" />
+              Start Conversation
+            </Button>
           </CardContent>
         </Card>
       )}
 
       {currentStep === 'conversation' && (
-        <div className="space-y-4">
+        <div className="space-y-4 max-w-4xl mx-auto">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Video className="h-5 w-5 text-red-500 animate-pulse" />
-                Recording: {selectedType.title}
-              </CardTitle>
-              <CardDescription>Speak naturally and take your time</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-6 space-y-4">
               {/* Mirror Video Preview */}
               <div className="relative rounded-2xl overflow-hidden aspect-video shadow-2xl border-4 border-gray-200 bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100">
                 {isCameraLoading && (
@@ -395,12 +342,22 @@ export default function ConversationAnalysisPage() {
                 />
               </div>
               
-              <div className="bg-muted p-4 rounded-lg">
-                <p className="text-sm font-medium mb-2 text-center">Remember the prompt:</p>
-                <p className="text-sm italic text-center">"{selectedType.prompt}"</p>
-              </div>
+              {/* AI Greeting Display */}
+              {aiGreeting && (
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950 p-5 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                      <MessageSquare className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">AI Companion</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 italic">"{aiGreeting}"</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
-              <div className="flex gap-2 justify-center">
+              <div className="flex gap-2 justify-center pt-2">
                 <Button
                   onClick={stopRecording}
                   variant="destructive"
@@ -408,67 +365,34 @@ export default function ConversationAnalysisPage() {
                   className="min-w-[200px]"
                 >
                   <Pause className="mr-2 h-5 w-5" />
-                  Stop Recording
+                  End Conversation
                 </Button>
               </div>
               
               <div className="text-center text-sm text-muted-foreground">
-                🎤 Audio and video are being recorded for analysis
+                Speak naturally • Your conversation is being recorded for analysis
               </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {currentStep === 'review' && (
-        <div className="space-y-4">
+      {/* Analyzing State */}
+      {isAnalyzing && (
+        <div className="max-w-2xl mx-auto">
           <Card>
-            <CardHeader>
-              <CardTitle>Review Your Conversation</CardTitle>
-              <CardDescription>
-                Review the recording and transcript before analysis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-muted p-4 rounded-lg">
-                <p className="text-sm font-medium mb-2">Recording Details:</p>
-                <ul className="text-sm space-y-1">
-                  <li>Type: {selectedType.title}</li>
-                  <li>Duration: {formatTime(recordedTime)}</li>
-                  <li>Audio: {audioBlob ? 'Recorded' : 'Not available'}</li>
-                  <li>Video: {videoBlob ? 'Recorded' : 'Not available'}</li>
-                </ul>
-              </div>
-
-              <div className="bg-muted/50 p-4 rounded-lg">
-                <h4 className="font-medium mb-2">Transcript Preview:</h4>
-                <p className="text-sm">{transcript}</p>
-              </div>
-              
-              <div className="flex gap-2 justify-center">
-                <Button
-                  variant="outline"
-                  onClick={startNewConversation}
-                >
-                  Record Again
-                </Button>
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="min-w-[120px]"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Brain className="mr-2 h-4 w-4 animate-pulse" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Brain className="mr-2 h-4 w-4" />
-                      Analyze Conversation
-                    </>
-                  )}
-                </Button>
+            <CardContent className="p-12">
+              <div className="text-center">
+                <Brain className="h-16 w-16 mx-auto mb-6 text-primary animate-pulse" />
+                <h3 className="text-xl font-semibold mb-2">Analyzing Your Conversation</h3>
+                <p className="text-muted-foreground mb-6">
+                  Processing speech patterns and cognitive markers...
+                </p>
+                <div className="flex justify-center gap-2">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -593,22 +517,58 @@ export default function ConversationAnalysisPage() {
                   </ul>
                 </div>
               )}
-              
-              <div className="flex gap-2 justify-center pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={startNewConversation}
-                >
-                  New Conversation
-                </Button>
-                <Button
-                  onClick={() => router.push('/')}
-                >
-                  Back to Dashboard
-                </Button>
-              </div>
             </CardContent>
           </Card>
+
+          {/* Conversation Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Conversation Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm font-medium mb-2">Recording Information:</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Duration:</span>
+                    <span className="ml-2 font-medium">{formatTime(recordedTime)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Audio:</span>
+                    <span className="ml-2 font-medium">{audioBlob ? '✓ Recorded' : '✗ Not available'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Video:</span>
+                    <span className="ml-2 font-medium">{videoBlob ? '✓ Recorded' : '✗ Not available'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {transcript && (
+                <div className="bg-muted/50 p-4 rounded-lg">
+                  <h4 className="font-medium mb-2">Transcript Preview:</h4>
+                  <p className="text-sm text-muted-foreground">{transcript}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Actions */}
+          <div className="flex gap-2 justify-center">
+            <Button
+              variant="outline"
+              onClick={startNewConversation}
+              size="lg"
+            >
+              New Conversation
+            </Button>
+            <Button
+              onClick={() => router.push('/')}
+              size="lg"
+            >
+              Back to Dashboard
+            </Button>
+          </div>
         </div>
       )}
     </div>

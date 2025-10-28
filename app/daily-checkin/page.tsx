@@ -103,10 +103,10 @@ export default function DailyCheckinPage() {
               </div>
               <div className="flex-1">
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Conversation Analysis
+                  AI Mirror Conversation
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  Natural conversation for passive cognitive monitoring through speech patterns and memory
+                  Chat naturally with your AI companion for cognitive health monitoring
                 </p>
                 <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span className="flex items-center gap-1">
