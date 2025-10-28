@@ -4,7 +4,7 @@ import { synthesizeSpeech } from '@/lib/services/huawei-tts.service';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { text, speed, pitch, volume } = body;
+    const { text } = body;
 
     if (!text) {
       return NextResponse.json(
@@ -13,12 +13,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('[TTS API] Starting speech synthesis...');
+    console.log('[TTS API] Text length:', text.length);
+    console.log('[TTS API] Region:', process.env.HUAWEI_SIS_REGION);
+    console.log('[TTS API] Project ID:', process.env.HUAWEI_SIS_PROJECT_ID?.substring(0, 8) + '...');
+
     // Synthesize speech using Huawei TTS
-    const result = await synthesizeSpeech(text, {
-      speed,
-      pitch,
-      volume,
-    });
+    const result = await synthesizeSpeech(text);
+
+    console.log('[TTS API] Synthesis successful, audio data length:', result.audioData?.length || 0);
 
     return NextResponse.json({
       success: true,
@@ -27,9 +30,15 @@ export async function POST(request: NextRequest) {
       duration: result.duration,
     });
   } catch (error) {
-    console.error('Speech synthesis API error:', error);
+    console.error('[TTS API] Speech synthesis error:', error);
+    console.error('[TTS API] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    
     return NextResponse.json(
       {
+        success: false,
         error: error instanceof Error ? error.message : 'Failed to synthesize speech',
       },
       { status: 500 }

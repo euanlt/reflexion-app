@@ -54,10 +54,8 @@ export async function transcribeAudio(
     const requestBody = {
       config: {
         audio_format: 'wav',
-        asr_mode: 'short',
-        language: 'english_8k',
-        sample_rate: 16000,
-        property: 'english_16k_general',
+        property: 'english_8k_common',
+        add_punc: 'yes',
       },
       data: audioBase64,
     };

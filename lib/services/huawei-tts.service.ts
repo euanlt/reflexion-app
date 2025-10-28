@@ -38,17 +38,18 @@ export async function synthesizeSpeech(
     const endpoint = config.endpoint || `https://sis-ext.${config.region}.myhuaweicloud.com`;
     const url = `${endpoint}/v1/${config.projectId}/tts`;
 
+    // Huawei TTS API format (based on official docs)
     const requestBody = {
       text,
       config: {
         audio_format: 'wav',
         sample_rate: '16000',
-        property: 'english_emily_common',
-        speed: options?.speed || 0,
-        pitch: options?.pitch || 0,
-        volume: options?.volume || 0,
+        property: 'english_camila_common', // Using available English voice
       },
     };
+
+    console.log('[TTS Service] Request URL:', url);
+    console.log('[TTS Service] Request body:', JSON.stringify(requestBody, null, 2));
 
     // Make API request
     const response = await fetch(url, {
@@ -60,10 +61,12 @@ export async function synthesizeSpeech(
       body: JSON.stringify(requestBody),
     });
 
+    console.log('[TTS Service] Response status:', response.status, response.statusText);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('TTS API error:', errorText);
-      throw new Error(`TTS synthesis failed: ${response.status} ${response.statusText}`);
+      console.error('[TTS Service] Error response:', errorText);
+      throw new Error(`TTS synthesis failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data: HuaweiTTSResponse = await response.json();

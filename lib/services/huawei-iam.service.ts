@@ -37,6 +37,8 @@ export async function getIAMToken(config: IAMConfig): Promise<string> {
   }
 
   try {
+    // Use exact URL format from Huawei documentation
+    // Reference: https://support.huaweicloud.com/intl/en-us/api-sis/sis_03_0058.html
     const iamEndpoint = `https://iam.${config.region}.myhuaweicloud.com/v3/auth/tokens`;
     
     console.log('Requesting new IAM token from:', iamEndpoint);

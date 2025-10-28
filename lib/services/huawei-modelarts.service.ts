@@ -1,17 +1,20 @@
 /**
  * Huawei Cloud ModelArts Service
  * Provides AI model inference capabilities for conversation generation
+ * Uses token-based authentication (same as SIS)
+ * Reference: https://support.huaweicloud.com/intl/en-us/usermanual-standard-modelarts/inference-modelarts-0023.html
  */
 
 import type { ModelArtsGreetingResponse } from '@/types/huawei-services';
+import { getIAMToken, getIAMConfig } from './huawei-iam.service';
 
 interface ModelArtsConfig {
   endpoint: string;
-  apiKey: string;
 }
 
 /**
  * Generate a personalized AI greeting using ModelArts
+ * Uses token-based authentication with X-Auth-Token header
  */
 export async function generateGreeting(context?: {
   userName?: string;
@@ -21,12 +24,16 @@ export async function generateGreeting(context?: {
   const config = getModelArtsConfig();
   
   // If ModelArts is not configured, return a fallback greeting
-  if (!config.endpoint || !config.apiKey) {
+  if (!config.endpoint) {
     console.warn('ModelArts not configured, using fallback greeting');
     return getFallbackGreeting(context);
   }
 
   try {
+    // Get IAM token for authentication
+    const iamConfig = getIAMConfig();
+    const token = await getIAMToken(iamConfig);
+
     // Prepare request body
     const timeOfDay = context?.timeOfDay || getTimeOfDay();
     const requestBody = {
@@ -38,12 +45,12 @@ export async function generateGreeting(context?: {
       },
     };
 
-    // Make API request to ModelArts endpoint
+    // Make API request to ModelArts endpoint using token-based auth
     const response = await fetch(config.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Apig-AppCode': config.apiKey,
+        'X-Auth-Token': token,  // Token-based authentication
       },
       body: JSON.stringify(requestBody),
     });
@@ -101,7 +108,6 @@ function getTimeOfDay(): string {
 export function getModelArtsConfig(): ModelArtsConfig {
   return {
     endpoint: process.env.HUAWEI_MODELARTS_ENDPOINT || '',
-    apiKey: process.env.HUAWEI_MODELARTS_API_KEY || '',
   };
 }
 
