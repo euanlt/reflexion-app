@@ -110,13 +110,20 @@ export default function ConversationAnalysisPage() {
       // Store stream reference
       streamRef.current = stream
 
-      // Display video preview
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-      
-      setIsCameraLoading(false)
+      // Wait for the video element to be ready before attaching stream
+      setTimeout(async () => {
+        if (videoRef.current && streamRef.current) {
+          videoRef.current.srcObject = streamRef.current
+          try {
+            await videoRef.current.play()
+            console.log('Video is playing')
+          } catch (playErr) {
+            console.error('Failed to play video:', playErr)
+            toast.error('Failed to start video playback')
+          }
+        }
+        setIsCameraLoading(false)
+      }, 100)
 
       // Create separate recorders for audio and video
       const audioStream = new MediaStream(stream.getAudioTracks())
@@ -241,6 +248,17 @@ export default function ConversationAnalysisPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  // Re-attach stream when video element becomes available
+  React.useEffect(() => {
+    if (currentStep === 'conversation' && videoRef.current && streamRef.current && !isCameraLoading) {
+      console.log('Re-attaching stream to video element in useEffect')
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(err => {
+        console.error('Failed to play video in useEffect:', err)
+      })
+    }
+  }, [currentStep, isCameraLoading])
+
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <div className="mb-6">
@@ -347,11 +365,21 @@ export default function ConversationAnalysisPage() {
                 )}
                 <video
                   ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                  style={{ transform: 'scaleX(-1)' }}
+                  autoPlay={true}
+                  muted={true}
+                  playsInline={true}
+                  className="w-full h-full"
+                  style={{ 
+                    display: 'block',
+                    objectFit: 'cover',
+                    transform: 'scaleX(-1)'
+                  }}
+                  onLoadedMetadata={() => console.log('Video metadata loaded')}
+                  onPlay={() => console.log('Video playing')}
+                  onError={(e) => {
+                    console.error('Video element error:', e)
+                    toast.error('Video playback error. Please try again.')
+                  }}
                 />
                 {!isCameraLoading && (
                   <>
