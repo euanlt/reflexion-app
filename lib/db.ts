@@ -58,6 +58,56 @@ export interface VideoAssessment {
   userId?: string;
 }
 
+export interface ConversationAssessment {
+  id?: number;
+  sessionId?: number;
+  conversationType: 'memory-recall' | 'current-events' | 'problem-solving' | 'storytelling' | 'open';
+  audioBlob?: Blob;
+  videoBlob?: Blob;
+  duration: number;
+  transcript?: string;
+  analysisResults?: {
+    speech: {
+      wordFindingScore: number;
+      fluencyScore: number;
+      articulationScore: number;
+      speechRate: number; // words per minute
+      pauseFrequency: number;
+      fillerWordCount: number;
+    };
+    language: {
+      vocabularyDiversity: number;
+      sentenceComplexity: number;
+      semanticCoherence: number;
+      grammarAccuracy: number;
+    };
+    memory: {
+      shortTermRecall: number;
+      temporalOrientation: number;
+      narrativeCoherence: number;
+    };
+    cognitive: {
+      topicMaintenance: number;
+      abstractThinking: number;
+      problemSolving: number;
+    };
+    overallScore: number;
+    riskLevel: 'low' | 'moderate' | 'high';
+    indicators: string[];
+    recommendations: string[];
+  };
+  recordedAt: string;
+  analyzedAt?: string;
+  // Huawei Cloud OBS references
+  obsAudioKey?: string;
+  obsVideoKey?: string;
+  obsTranscriptKey?: string;
+  obsResultsKey?: string;
+  cloudSyncStatus?: 'pending' | 'uploading' | 'synced' | 'failed';
+  cloudSyncedAt?: string;
+  userId?: string;
+}
+
 export interface UserProfile {
   id?: number;
   name: string;
@@ -79,6 +129,7 @@ export class ReflexionDB extends Dexie {
   checkInSessions!: Table<CheckInSession>;
   userProfile!: Table<UserProfile>;
   videoAssessments!: Table<VideoAssessment>;
+  conversationAssessments!: Table<ConversationAssessment>;
 
   constructor() {
     super('ReflexionDB');
@@ -95,6 +146,12 @@ export class ReflexionDB extends Dexie {
       checkInSessions: '++id, date, overallScore, completedAt',
       userProfile: '++id, name, age',
       videoAssessments: '++id, sessionId, taskType, recordedAt, analyzedAt, cloudSyncStatus, userId, obsVideoKey'
+    });
+    this.version(4).stores({
+      checkInSessions: '++id, date, overallScore, completedAt',
+      userProfile: '++id, name, age',
+      videoAssessments: '++id, sessionId, taskType, recordedAt, analyzedAt, cloudSyncStatus, userId, obsVideoKey',
+      conversationAssessments: '++id, sessionId, conversationType, recordedAt, analyzedAt, cloudSyncStatus, userId'
     });
   }
 }
@@ -182,4 +239,44 @@ export const getVideoAssessmentsByCloudStatus = async (status: VideoAssessment['
     .where('cloudSyncStatus')
     .equals(status)
     .toArray();
+};
+
+// Conversation assessment functions
+export const saveConversationAssessment = async (assessment: Omit<ConversationAssessment, 'id'>) => {
+  return await db.conversationAssessments.add(assessment);
+};
+
+export const getConversationAssessments = async (limit: number = 10) => {
+  return await db.conversationAssessments
+    .orderBy('recordedAt')
+    .reverse()
+    .limit(limit)
+    .toArray();
+};
+
+export const updateConversationAssessmentAnalysis = async (
+  id: number,
+  analysisResults: ConversationAssessment['analysisResults']
+) => {
+  return await db.conversationAssessments.update(id, {
+    analysisResults,
+    analyzedAt: new Date().toISOString()
+  });
+};
+
+export const updateConversationAssessmentCloudSync = async (
+  id: number,
+  obsAudioKey: string,
+  obsVideoKey: string | null,
+  obsTranscriptKey: string,
+  obsResultsKey: string
+) => {
+  return await db.conversationAssessments.update(id, {
+    obsAudioKey,
+    obsVideoKey: obsVideoKey || undefined,
+    obsTranscriptKey,
+    obsResultsKey,
+    cloudSyncStatus: 'synced',
+    cloudSyncedAt: new Date().toISOString()
+  });
 };
