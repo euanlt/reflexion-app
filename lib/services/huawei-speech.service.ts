@@ -14,17 +14,27 @@ interface SISConfig {
 
 /**
  * Convert audio blob to base64 string
+ * Works in both browser and Node.js environments
  */
 async function audioToBase64(audioBlob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = (reader.result as string).split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(audioBlob);
-  });
+  // Check if we're in a browser environment
+  if (typeof window !== 'undefined' && typeof FileReader !== 'undefined') {
+    // Browser environment - use FileReader
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(audioBlob);
+    });
+  } else {
+    // Node.js environment - use Buffer
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return buffer.toString('base64');
+  }
 }
 
 /**
@@ -53,14 +63,18 @@ export async function transcribeAudio(
 
     const requestBody = {
       config: {
-        audio_format: 'wav',
-        property: 'english_8k_common',
+        audio_format: 'auto',           // Auto-detect format (supports webm, wav, etc.)
+        property: 'english_8k_common',   // 8kHz common property (compatible with browser audio)
         add_punc: 'yes',
       },
       data: audioBase64,
     };
 
     // Make API request
+    console.log('[SIS] Request URL:', url);
+    console.log('[SIS] Request body config:', JSON.stringify(requestBody.config, null, 2));
+    console.log('[SIS] Audio data length:', audioBase64.length);
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -70,10 +84,22 @@ export async function transcribeAudio(
       body: JSON.stringify(requestBody),
     });
 
+    console.log('[SIS] Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('SIS API error:', errorText);
-      throw new Error(`SIS transcription failed: ${response.status} ${response.statusText}`);
+      console.error('[SIS] Full error response:', errorText);
+      
+      // Try to parse error details
+      let errorDetails = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorDetails = JSON.stringify(errorJson, null, 2);
+      } catch (e) {
+        // Not JSON, use raw text
+      }
+      
+      throw new Error(`SIS transcription failed: ${response.status} ${response.statusText}\n${errorDetails}`);
     }
 
     const data: HuaweiSISResponse = await response.json();

@@ -22,11 +22,25 @@ export default function ConversationAnalysisPage() {
   
   // State machine
   const [conversationState, setConversationState] = useState<ConversationState>('idle')
+  const conversationStateRef = useRef<ConversationState>('idle') // Ref to avoid closure issues
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([])
   const [recordedTime, setRecordedTime] = useState(0)
   const [analysisResults, setAnalysisResults] = useState<ConversationAssessment['analysisResults'] | null>(null)
   const [isCameraLoading, setIsCameraLoading] = useState(false)
   const [audioVolume, setAudioVolume] = useState(0)
+
+  // Update ref when state changes
+  useEffect(() => {
+    conversationStateRef.current = conversationState
+    console.log('[State] Conversation state changed to:', conversationState)
+  }, [conversationState])
+
+  // Helper to update both state and ref
+  const updateConversationState = (newState: ConversationState) => {
+    console.log('[State] Updating conversation state from', conversationStateRef.current, 'to', newState)
+    conversationStateRef.current = newState
+    setConversationState(newState)
+  }
 
   // Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -92,7 +106,7 @@ export default function ConversationAnalysisPage() {
       const voice = getBestVoice()
       if (voice) {
         utterance.voice = voice
-        console.log('Using voice:', voice.name)
+        console.log('[TTS] Using voice:', voice.name)
       }
       
       utterance.rate = 0.85
@@ -100,21 +114,31 @@ export default function ConversationAnalysisPage() {
       utterance.volume = 1.0
       
       utterance.onend = () => {
-        console.log('Speech ended')
+        console.log('[TTS] Speech ended, calling onEnd callback')
         isSpeakingRef.current = false
-        if (onEnd) onEnd()
+        if (onEnd) {
+          // Small delay to ensure state updates properly
+          setTimeout(() => {
+            console.log('[TTS] Executing onEnd callback')
+            onEnd()
+          }, 100)
+        }
       }
 
       utterance.onerror = (error) => {
-        console.error('Speech error:', error)
+        console.error('[TTS] Speech error:', error)
         isSpeakingRef.current = false
-        if (onEnd) onEnd()
+        if (onEnd) {
+          setTimeout(() => onEnd(), 100)
+        }
       }
 
       isSpeakingRef.current = true
+      console.log('[TTS] Starting speech:', text.substring(0, 50) + '...')
       window.speechSynthesis.speak(utterance)
     } else if (onEnd) {
-      onEnd()
+      console.log('[TTS] speechSynthesis not available, calling onEnd immediately')
+      setTimeout(() => onEnd(), 100)
     }
   }
 
@@ -186,9 +210,10 @@ export default function ConversationAnalysisPage() {
       }, 1000)
 
       // Speak greeting and then start listening
-      setConversationState('ai-speaking')
+      updateConversationState('ai-speaking')
       speakText(greeting, () => {
         // After greeting, start listening
+        console.log('[Conversation] Greeting finished, starting listening...')
         startListening()
       })
 
@@ -202,14 +227,19 @@ export default function ConversationAnalysisPage() {
 
   // Start listening for user input
   const startListening = async () => {
-    if (!streamRef.current) return
+    if (!streamRef.current) {
+      console.error('[Conversation] No stream available!')
+      return
+    }
 
     try {
       console.log('[Conversation] Starting to listen...')
-      setConversationState('listening')
+      updateConversationState('listening')
 
       // Initialize audio recording
       const audioStream = new MediaStream(streamRef.current.getAudioTracks())
+      console.log('[Conversation] Audio tracks:', audioStream.getAudioTracks().length)
+      
       const audioRecorder = new MediaRecorder(audioStream, {
         mimeType: 'audio/webm'
       })
@@ -218,79 +248,124 @@ export default function ConversationAnalysisPage() {
 
       audioRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
+          console.log('[Conversation] Audio data received:', e.data.size, 'bytes')
           audioChunksRef.current.push(e.data)
         }
       }
 
+      audioRecorder.onerror = (e) => {
+        console.error('[Conversation] AudioRecorder error:', e)
+      }
+
       audioRecorder.start()
       mediaRecorderRef.current = audioRecorder
+      console.log('[Conversation] AudioRecorder started, state:', audioRecorder.state)
 
       // Initialize VAD
+      console.log('[Conversation] Initializing VAD...')
       vadRef.current = new VoiceActivityDetector({
-        silenceThreshold: 30,
-        silenceDuration: 2000, // 2 seconds
-        minSpeechDuration: 300,
+        silenceThreshold: 8,    // Lowered from 30 to 8 for better sensitivity
+        silenceDuration: 2000,  // 2 seconds
+        minSpeechDuration: 500, // Increased from 300ms to 500ms to reduce false triggers
         sampleRate: 100,
       })
 
       await vadRef.current.start(streamRef.current, {
+        onSpeechStart: () => {
+          console.log('[Conversation] *** SPEECH STARTED ***')
+        },
         onSpeechEnd: () => {
-          console.log('[Conversation] User finished speaking')
+          console.log('[Conversation] *** SPEECH ENDED - calling handleUserTurnComplete ***')
           handleUserTurnComplete()
         },
         onVolumeChange: (volume) => {
           setAudioVolume(volume)
+          // Log volume occasionally for debugging
+          if (Math.random() < 0.05) { // 5% of the time
+            console.log('[Conversation] Volume:', volume)
+          }
         },
       })
 
-      console.log('[Conversation] Listening for user input...')
+      console.log('[Conversation] VAD started, listening for user input...')
+      toast.success('Listening... speak now')
     } catch (error) {
-      console.error('Error starting listening:', error)
+      console.error('[Conversation] Error starting listening:', error)
       toast.error('Failed to start listening')
     }
   }
 
   // Handle when user finishes their turn
   const handleUserTurnComplete = async () => {
-    if (conversationState !== 'listening') return
-    if (conversationManagerRef.current.isCurrentlyProcessing()) return
+    const currentState = conversationStateRef.current
+    console.log('[Conversation] handleUserTurnComplete called')
+    console.log('[Conversation] Current state (ref):', currentState)
+    console.log('[Conversation] State variable:', conversationState)
+    
+    if (currentState !== 'listening') {
+      console.warn('[Conversation] Not in listening state (ref shows:', currentState, '), ignoring')
+      return
+    }
+    
+    if (conversationManagerRef.current.isCurrentlyProcessing()) {
+      console.log('[Conversation] Already processing, ignoring')
+      return
+    }
 
     console.log('[Conversation] Processing user turn...')
-    setConversationState('processing')
+    updateConversationState('processing')
+
+    // Stop VAD temporarily
+    if (vadRef.current) {
+      console.log('[Conversation] Stopping VAD')
+      vadRef.current.stop()
+    }
 
     // Stop recording this turn
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
-
+      console.log('[Conversation] Stopping recorder, state:', mediaRecorderRef.current.state)
+      
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
         console.log('[Conversation] Audio captured:', audioBlob.size, 'bytes')
 
+        if (audioBlob.size === 0) {
+          console.error('[Conversation] Audio blob is empty!')
+          toast.error('No audio captured. Please try speaking again.')
+          startListening()
+          return
+        }
+
         try {
+          console.log('[Conversation] Calling processUserTurn...')
           // Process user turn and get AI response
           const aiResponse = await conversationManagerRef.current.processUserTurn(audioBlob)
+          console.log('[Conversation] Got AI response:', aiResponse)
           
           // Update turns display
           setConversationTurns([...conversationManagerRef.current.getAllTurns()])
 
           // Speak AI response
-          setConversationState('ai-speaking')
+          console.log('[Conversation] Speaking AI response...')
+          updateConversationState('ai-speaking')
           speakText(aiResponse, () => {
+            console.log('[Conversation] AI finished speaking, restarting listening...')
             // After AI finishes speaking, start listening again
             startListening()
           })
         } catch (error) {
-          console.error('Error processing turn:', error)
+          console.error('[Conversation] Error processing turn:', error)
           toast.error('Error processing your response. Please try again.')
           // Resume listening despite error
           startListening()
         }
       }
-    }
-
-    // Stop VAD temporarily
-    if (vadRef.current) {
-      vadRef.current.stop()
+      
+      mediaRecorderRef.current.stop()
+    } else {
+      console.error('[Conversation] MediaRecorder not recording! State:', mediaRecorderRef.current?.state)
+      toast.error('Recording not active. Restarting...')
+      startListening()
     }
   }
 
@@ -346,7 +421,7 @@ export default function ConversationAnalysisPage() {
       window.speechSynthesis.cancel()
     }
 
-    setConversationState('idle')
+    updateConversationState('idle')
   }
 
   // Analyze conversation
@@ -364,7 +439,7 @@ export default function ConversationAnalysisPage() {
 
   // Start new conversation
   const startNewConversation = () => {
-    setConversationState('idle')
+    updateConversationState('idle')
     setConversationTurns([])
     setRecordedTime(0)
     setAnalysisResults(null)
@@ -392,11 +467,22 @@ export default function ConversationAnalysisPage() {
           </div>
         )
       case 'listening':
+        const isSpeaking = audioVolume > 8
         return (
-          <div className="flex items-center gap-2 text-green-600">
-            <Mic className={`w-5 h-5 ${audioVolume > 30 ? 'animate-pulse' : ''}`} />
-            <span className="text-sm font-medium">Listening...</span>
-            {audioVolume > 30 && <span className="text-xs">(Speaking detected)</span>}
+          <div className="flex items-center gap-3 text-green-600">
+            <Mic className={`w-5 h-5 ${isSpeaking ? 'animate-pulse' : ''}`} />
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-medium">Listening...</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all ${isSpeaking ? 'bg-green-500' : 'bg-gray-400'}`}
+                    style={{ width: `${Math.min((audioVolume / 30) * 100, 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs">{isSpeaking ? '🎤 Speaking' : '🤫 Silent'}</span>
+              </div>
+            </div>
           </div>
         )
       case 'processing':

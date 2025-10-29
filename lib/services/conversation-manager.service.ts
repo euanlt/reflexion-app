@@ -4,7 +4,6 @@
  * 1. User speaks → 2. Transcribe → 3. Generate AI response → 4. Speak response
  */
 
-import { transcribeAudio } from './huawei-speech.service';
 import { generateConversationResponse } from './huawei-modelarts.service';
 import type { AssessmentFocus } from '@/lib/ai/cognitive-prompts';
 import { determineNextFocus, getFallbackResponse } from '@/lib/ai/cognitive-prompts';
@@ -60,11 +59,24 @@ export class ConversationManager {
     try {
       console.log('[ConversationManager] Processing user turn...');
       
-      // Step 1: Transcribe user's audio
+      // Step 1: Transcribe user's audio via API route (server-side)
       let userText = '';
       try {
-        const transcriptionResult = await transcribeAudio(audioBlob);
-        userText = transcriptionResult.transcript;
+        console.log('[ConversationManager] Sending audio to transcription API...');
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'audio.webm');
+
+        const response = await fetch('/api/conversation-analysis/transcribe', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Transcription API failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        userText = data.transcript || '[Speech unclear - transcription failed]';
         console.log('[ConversationManager] Transcription:', userText);
       } catch (error) {
         console.error('[ConversationManager] Transcription failed:', error);
