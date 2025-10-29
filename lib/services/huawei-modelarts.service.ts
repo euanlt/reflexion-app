@@ -21,11 +21,12 @@ export async function generateGreeting(context?: {
   timeOfDay?: string;
   previousConversations?: number;
 }): Promise<string> {
-  const config = getModelArtsConfig();
+  // Use conversation endpoint for greetings
+  const endpoint = process.env.HUAWEI_MODELARTS_CONVERSATION_ENDPOINT;
   
   // If ModelArts is not configured, return a fallback greeting
-  if (!config.endpoint) {
-    console.warn('ModelArts not configured, using fallback greeting');
+  if (!endpoint) {
+    console.warn('[ModelArts] Not configured, using fallback greeting');
     return getFallbackGreeting(context);
   }
 
@@ -34,19 +35,23 @@ export async function generateGreeting(context?: {
     const iamConfig = getIAMConfig();
     const token = await getIAMToken(iamConfig);
 
-    // Prepare request body
+    // Create a natural, simple greeting
     const timeOfDay = context?.timeOfDay || getTimeOfDay();
+    const prompt = `You are a helpful ai mirror. Greet someone warmly for ${timeOfDay} in 1 short sentence.`; 
+    
     const requestBody = {
-      inputs: {
-        time_of_day: timeOfDay,
-        user_name: context?.userName || 'there',
-        previous_conversations: context?.previousConversations || 0,
-        prompt: `Generate a warm, friendly greeting for a cognitive health conversation. Time: ${timeOfDay}. Keep it natural and encouraging.`,
-      },
+      prompt: prompt,
+      temperature: 0.9,  // Higher for more natural, varied responses
+      max_tokens: 250,  // Must be > input token count (model requirement)
+      top_p: 0.95,
     };
 
+    console.log('[ModelArts] Generating greeting...');
+    console.log('[ModelArts] Endpoint:', endpoint);
+    console.log('[ModelArts] Request body:', JSON.stringify(requestBody, null, 2));
+
     // Make API request to ModelArts endpoint using token-based auth
-    const response = await fetch(config.endpoint, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,15 +60,28 @@ export async function generateGreeting(context?: {
       body: JSON.stringify(requestBody),
     });
 
+    console.log('[ModelArts] Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ModelArts API error:', errorText);
+      console.error('[ModelArts] API error:', errorText);
+      console.error('[ModelArts] Response headers:', Object.fromEntries(response.headers.entries()));
       throw new Error(`ModelArts request failed: ${response.status}`);
     }
 
-    const data: ModelArtsGreetingResponse = await response.json();
+    const data = await response.json();
+    console.log('[ModelArts] Response data:', JSON.stringify(data, null, 2));
     
-    return data.greeting || getFallbackGreeting(context);
+    // Extract greeting from choices array
+    const greeting = data.choices?.[0]?.text?.trim();
+    
+    if (!greeting) {
+      console.warn('[ModelArts] Empty response, using fallback');
+      return getFallbackGreeting(context);
+    }
+    
+    console.log('[ModelArts] Greeting generated:', greeting.substring(0, 50) + '...');
+    return greeting;
   } catch (error) {
     console.error('Error generating greeting with ModelArts:', error);
     // Fall back to predefined greetings
@@ -115,6 +133,11 @@ export async function generateConversationResponse(
   // Check if conversation endpoint is configured
   const conversationEndpoint = process.env.HUAWEI_MODELARTS_CONVERSATION_ENDPOINT;
   
+  console.log('[ModelArts] Conversation endpoint check:', {
+    isSet: !!conversationEndpoint,
+    endpoint: conversationEndpoint ? `${conversationEndpoint.substring(0, 50)}...` : 'NOT SET'
+  });
+  
   if (!conversationEndpoint) {
     console.warn('[ModelArts] Conversation endpoint not configured, using fallback');
     return generateFallbackConversationResponse(conversationHistory, assessmentFocus);
@@ -125,25 +148,36 @@ export async function generateConversationResponse(
     const iamConfig = getIAMConfig();
     const token = await getIAMToken(iamConfig);
 
-    // Build prompt with cognitive assessment guidance
-    const {buildConversationPrompt} = await import('@/lib/ai/cognitive-prompts');
-    const prompt = buildConversationPrompt(
-      assessmentFocus,
-      conversationHistory,
-      conversationHistory.length === 0
-    );
+    // Get recent conversation for context (last 2 turns = 1 user + 1 AI)
+    const recentTurns = conversationHistory.slice(-2);
+    const lastUserMessage = conversationHistory
+      .filter(t => t.speaker === 'user')
+      .pop()?.text || 'Hello!';
 
-    // Prepare request body for ModelArts
+    // Build prompt with brief context if available
+    let prompt = '';
+    if (recentTurns.length >= 2) {
+      // Include previous turn for context
+      const prevUser = recentTurns[0]?.text?.substring(0, 60) || '';
+      const prevAI = recentTurns[1]?.text?.substring(0, 60) || '';
+      prompt = `Previous: User said "${prevUser}", you replied "${prevAI}". Now user says: "${lastUserMessage}". Reply warmly in 1-2 sentences.`;
+    } else {
+      // First turn, no context
+      prompt = `Someone said: "${lastUserMessage}". Reply warmly in 1-2 sentences.`;
+    }
+
+    // Prepare request body using correct ModelArts format
+    // NOTE: DO NOT use 'history' parameter - model doesn't support it
     const requestBody = {
-      inputs: [{
-        prompt,
-        temperature: 0.7,
-        max_tokens: 150,
-        top_p: 0.9,
-      }],
+      prompt,
+      temperature: 0.8,
+      max_tokens: 300,  // Must be > input token count (model requirement)
+      top_p: 0.95,
     };
 
     console.log('[ModelArts] Generating conversation response...');
+    console.log('[ModelArts] Last user message:', lastUserMessage);
+    console.log('[ModelArts] Full prompt:', prompt);
 
     // Make API request to ModelArts conversation endpoint
     const response = await fetch(conversationEndpoint, {
@@ -162,26 +196,19 @@ export async function generateConversationResponse(
     }
 
     const data = await response.json();
+    console.log('[ModelArts] Full response:', JSON.stringify(data, null, 2));
     
-    // Extract response text from ModelArts response
-    // Format may vary depending on model, adjust as needed
-    let aiResponse = '';
-    if (data.outputs && data.outputs[0]) {
-      aiResponse = data.outputs[0].response || data.outputs[0].text || data.outputs[0];
-    } else if (data.response) {
-      aiResponse = data.response;
-    } else {
-      aiResponse = JSON.stringify(data);
-    }
-
-    // Clean up response
-    aiResponse = aiResponse.trim();
+    // Extract response text from choices array (correct ModelArts format)
+    const aiResponse = data.choices?.[0]?.text?.trim();
     
     if (!aiResponse) {
+      console.error('[ModelArts] Empty or missing AI response!');
+      console.error('[ModelArts] Response data:', data);
+      console.warn('[ModelArts] Falling back to predefined responses');
       throw new Error('Empty response from ModelArts');
     }
 
-    console.log('[ModelArts] Response generated:', aiResponse.substring(0, 100) + '...');
+    console.log('[ModelArts] ✅ Response generated:', aiResponse.substring(0, 100) + '...');
     return aiResponse;
   } catch (error) {
     console.error('[ModelArts] Error generating conversation response:', error);

@@ -4,7 +4,6 @@
  * 1. User speaks → 2. Transcribe → 3. Generate AI response → 4. Speak response
  */
 
-import { generateConversationResponse } from './huawei-modelarts.service';
 import type { AssessmentFocus } from '@/lib/ai/cognitive-prompts';
 import { determineNextFocus, getFallbackResponse } from '@/lib/ai/cognitive-prompts';
 
@@ -97,19 +96,34 @@ export class ConversationManager {
       // Update assessment focus based on progress
       this.currentFocus = determineNextFocus(this.currentFocus, this.turns.length);
 
-      // Step 2: Generate AI response
+      // Step 2: Generate AI response via API route (server-side)
       let aiResponse = '';
+      console.log('[ConversationManager] 🤖 Calling AI response API...');
+      console.log('[ConversationManager] Conversation history length:', this.turns.length);
+      console.log('[ConversationManager] Current focus:', this.currentFocus);
+      
       try {
-        aiResponse = await generateConversationResponse(
-          this.getConversationHistory(),
-          this.currentFocus
-        );
-        console.log('[ConversationManager] AI response:', aiResponse);
+        const response = await fetch('/api/conversation-analysis/generate-response', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationHistory: this.getConversationHistory(),
+            assessmentFocus: this.currentFocus,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`API failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        aiResponse = data.response;
+        console.log('[ConversationManager] ✅ AI response received:', aiResponse.substring(0, 50) + '...');
       } catch (error) {
-        console.error('[ConversationManager] AI response generation failed:', error);
+        console.error('[ConversationManager] ❌ AI response generation failed:', error);
         // Use fallback response
         aiResponse = getFallbackResponse();
-        console.log('[ConversationManager] Using fallback response:', aiResponse);
+        console.log('[ConversationManager] 🔄 Using fallback response:', aiResponse);
       }
 
       // Add AI turn to history
