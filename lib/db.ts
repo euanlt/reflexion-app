@@ -58,10 +58,24 @@ export interface VideoAssessment {
   userId?: string;
 }
 
+// Multi-turn conversation data structure
+export interface ConversationTurnData {
+  speaker: 'user' | 'ai';
+  text: string;
+  timestamp: number;
+  duration?: number;
+  // Audio blob for this specific turn (optional, for detailed analysis)
+  audioBlob?: Blob;
+}
+
 export interface ConversationAssessment {
   id?: number;
   sessionId?: number;
-  conversationType: 'memory-recall' | 'current-events' | 'problem-solving' | 'storytelling' | 'open';
+  conversationType: 'realtime-conversation' | 'memory-recall' | 'current-events' | 'problem-solving' | 'storytelling' | 'open';
+  // Multi-turn conversation data
+  turns?: ConversationTurnData[];
+  turnCount?: number;
+  // Legacy single audio/video (for backward compatibility)
   audioBlob?: Blob;
   videoBlob?: Blob;
   duration: number;
@@ -90,6 +104,12 @@ export interface ConversationAssessment {
       topicMaintenance: number;
       abstractThinking: number;
       problemSolving: number;
+    };
+    // Multi-turn specific metrics
+    turnTaking?: {
+      averageResponseTime: number;
+      appropriateResponses: number;
+      conversationalRepair: number;
     };
     overallScore: number;
     riskLevel: 'low' | 'moderate' | 'high';
