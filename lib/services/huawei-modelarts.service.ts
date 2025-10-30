@@ -13,6 +13,54 @@ interface ModelArtsConfig {
 }
 
 /**
+ * Clean up AI response to ensure it's concise and appropriate
+ */
+function cleanAIResponse(text: string): string {
+  let cleaned = text.trim();
+  
+  // Remove common emojis using explicit character list
+  const emojis = ['😊', '😀', '👍', '❤️', '✨', '🙂', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙃', '😉', '😇', '🥰', '😍', '🤩', '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐'];
+  for (const emoji of emojis) {
+    cleaned = cleaned.split(emoji).join('');
+  }
+  
+  // Remove verbose phrases
+  const verbosePhrases = [
+    "Of course, I'm here to help!",
+    "Of course, I'm here to help",
+    "I'm here to help!",
+    "I'm here to help",
+    "Great to hear from you!",
+    "Great to hear from you",
+    "That's great to hear!",
+    "That's great to hear",
+    "It's great to hear",
+    "I'd love to hear",
+    "Thank you for sharing",
+  ];
+  
+  for (const phrase of verbosePhrases) {
+    cleaned = cleaned.replace(new RegExp(phrase, 'gi'), '');
+  }
+  
+  // Remove extra quotes that the model might add
+  cleaned = cleaned.replace(/^["']|["']$/g, '');
+  
+  // Clean up extra whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  // If it starts with "That's" or "That sounds", remove it
+  cleaned = cleaned.replace(/^(That's|That sounds)\s+\w+[.,!]\s*/i, '');
+  
+  // Ensure first letter is capitalized
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  
+  return cleaned;
+}
+
+/**
  * Generate a personalized AI greeting using ModelArts
  * Uses token-based authentication with X-Auth-Token header
  */
@@ -35,15 +83,15 @@ export async function generateGreeting(context?: {
     const iamConfig = getIAMConfig();
     const token = await getIAMToken(iamConfig);
 
-    // Create a natural, simple greeting
+    // Create a natural greeting that starts a guided conversation
     const timeOfDay = context?.timeOfDay || getTimeOfDay();
-    const prompt = `You are a helpful ai mirror. Greet someone warmly for ${timeOfDay} in 1 short sentence.`; 
+    const prompt = `Reply in exactly 1 sentence. Say "${timeOfDay}" greeting and ask "How was your day?". NO emojis. NO extra words.`; 
     
     const requestBody = {
       prompt: prompt,
-      temperature: 0.9,  // Higher for more natural, varied responses
+      temperature: 0.5,  // Lower for better instruction-following
       max_tokens: 250,  // Must be > input token count (model requirement)
-      top_p: 0.95,
+      top_p: 0.9,
     };
 
     console.log('[ModelArts] Generating greeting...');
@@ -69,19 +117,23 @@ export async function generateGreeting(context?: {
       throw new Error(`ModelArts request failed: ${response.status}`);
     }
 
-    const data = await response.json();
-    console.log('[ModelArts] Response data:', JSON.stringify(data, null, 2));
-    
-    // Extract greeting from choices array
-    const greeting = data.choices?.[0]?.text?.trim();
-    
-    if (!greeting) {
-      console.warn('[ModelArts] Empty response, using fallback');
-      return getFallbackGreeting(context);
-    }
-    
-    console.log('[ModelArts] Greeting generated:', greeting.substring(0, 50) + '...');
-    return greeting;
+        const data = await response.json();
+        console.log('[ModelArts] Response data:', JSON.stringify(data, null, 2));
+        
+        // Extract greeting from choices array
+        const rawGreeting = data.choices?.[0]?.text?.trim();
+        
+        if (!rawGreeting) {
+          console.warn('[ModelArts] Empty response, using fallback');
+          return getFallbackGreeting(context);
+        }
+        
+        // Clean up the greeting
+        const greeting = cleanAIResponse(rawGreeting);
+        
+        console.log('[ModelArts] Raw greeting:', rawGreeting);
+        console.log('[ModelArts] Cleaned greeting:', greeting);
+        return greeting;
   } catch (error) {
     console.error('Error generating greeting with ModelArts:', error);
     // Fall back to predefined greetings
@@ -154,25 +206,36 @@ export async function generateConversationResponse(
       .filter(t => t.speaker === 'user')
       .pop()?.text || 'Hello!';
 
-    // Build prompt with brief context if available
+    // Build guided conversation prompt based on assessment focus
     let prompt = '';
+    
+    // Create assessment-specific guidance
+    const focusGuidance: Record<string, string> = {
+      memory: 'Ask about their day, recent activities, or what they had for meals',
+      language: 'Ask them to describe something or explain how to do something',
+      executive: 'Ask about their plans, decision-making, or problem-solving',
+      general: 'Ask a friendly question to keep the conversation flowing',
+    };
+    
+    const guidance = focusGuidance[assessmentFocus] || focusGuidance.general;
+    
     if (recentTurns.length >= 2) {
-      // Include previous turn for context
-      const prevUser = recentTurns[0]?.text?.substring(0, 60) || '';
-      const prevAI = recentTurns[1]?.text?.substring(0, 60) || '';
-      prompt = `Previous: User said "${prevUser}", you replied "${prevAI}". Now user says: "${lastUserMessage}". Reply warmly in 1-2 sentences.`;
+      // Include context + guidance
+      const prevUser = recentTurns[0]?.text?.substring(0, 50) || '';
+      const prevAI = recentTurns[1]?.text?.substring(0, 50) || '';
+      prompt = `User: "${lastUserMessage}". Task: ${guidance}. RULES: 1 sentence only. NO emojis. NO "great to hear". Start your question directly.`;
     } else {
-      // First turn, no context
-      prompt = `Someone said: "${lastUserMessage}". Reply warmly in 1-2 sentences.`;
+      // First turn - respond and guide
+      prompt = `User: "${lastUserMessage}". Task: ${guidance}. RULES: 1 sentence only. NO emojis. NO "great to hear". Start your question directly.`;
     }
 
     // Prepare request body using correct ModelArts format
     // NOTE: DO NOT use 'history' parameter - model doesn't support it
     const requestBody = {
       prompt,
-      temperature: 0.8,
+      temperature: 0.5,  // Lower for better instruction-following
       max_tokens: 300,  // Must be > input token count (model requirement)
-      top_p: 0.95,
+      top_p: 0.9,
     };
 
     console.log('[ModelArts] Generating conversation response...');
@@ -199,16 +262,20 @@ export async function generateConversationResponse(
     console.log('[ModelArts] Full response:', JSON.stringify(data, null, 2));
     
     // Extract response text from choices array (correct ModelArts format)
-    const aiResponse = data.choices?.[0]?.text?.trim();
+    const rawResponse = data.choices?.[0]?.text?.trim();
     
-    if (!aiResponse) {
+    if (!rawResponse) {
       console.error('[ModelArts] Empty or missing AI response!');
       console.error('[ModelArts] Response data:', data);
       console.warn('[ModelArts] Falling back to predefined responses');
       throw new Error('Empty response from ModelArts');
     }
 
-    console.log('[ModelArts] ✅ Response generated:', aiResponse.substring(0, 100) + '...');
+    // Clean up the response
+    const aiResponse = cleanAIResponse(rawResponse);
+
+    console.log('[ModelArts] Raw response:', rawResponse.substring(0, 100) + '...');
+    console.log('[ModelArts] ✅ Cleaned response:', aiResponse.substring(0, 100) + '...');
     return aiResponse;
   } catch (error) {
     console.error('[ModelArts] Error generating conversation response:', error);

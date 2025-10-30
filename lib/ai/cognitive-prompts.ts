@@ -50,11 +50,11 @@ Gently explore:
 - Temporal orientation (dates, seasons, current events)`,
   
   starterQuestions: [
-    "Tell me about your morning today. What did you have for breakfast?",
-    "What did you do yesterday? Anything interesting happen?",
-    "Can you walk me through your typical morning routine?",
-    "Tell me about a memorable event from this past week.",
-    "What's something you did recently that you really enjoyed?",
+    "What did you have for breakfast today?",
+    "What did you do yesterday?",
+    "Walk me through your morning routine?",
+    "Tell me about something memorable from this week.",
+    "What did you enjoy doing recently?",
   ],
   
   followUpStrategies: [
@@ -82,11 +82,11 @@ Naturally evaluate:
 - Comprehension (understand questions correctly)`,
   
   starterQuestions: [
-    "Tell me about your favorite hobby. What do you enjoy about it?",
-    "Can you describe your home to me? What's your favorite room?",
-    "What's your opinion on today's technology? How has it changed things?",
-    "Describe a meal you really love. How would you make it?",
-    "Tell me about a book or movie you enjoyed recently.",
+    "What's your favorite hobby and why?",
+    "Describe your home. What's your favorite room?",
+    "How has technology changed over the years?",
+    "Describe a meal you love. How do you make it?",
+    "Tell me about a book or movie you enjoyed.",
   ],
   
   followUpStrategies: [
@@ -114,11 +114,11 @@ Explore abilities in:
 - Mental flexibility (adapting, considering alternatives)`,
   
   starterQuestions: [
-    "If you were planning a birthday party, how would you go about it?",
-    "Imagine you're visiting a new city for a day. How would you plan your time?",
-    "What does the saying 'don't put all your eggs in one basket' mean to you?",
-    "If you had a free weekend coming up, what would you like to do?",
-    "How would you solve this: if you locked your keys in your car, what would you do?",
+    "How would you plan a birthday party?",
+    "You're visiting a new city. How do you plan your day?",
+    "What does 'don't put all your eggs in one basket' mean?",
+    "You have a free weekend. What would you do?",
+    "You locked your keys in your car. What now?",
   ],
   
   followUpStrategies: [
@@ -243,12 +243,12 @@ export function determineNextFocus(
  * Fallback responses when AI is unavailable
  */
 export const FALLBACK_RESPONSES = [
-  "That's interesting. Could you tell me more about that?",
-  "I'd love to hear more. What happened next?",
-  "That sounds nice. How did that make you feel?",
-  "Interesting. Can you describe that in more detail?",
-  "Tell me more about what you mean by that.",
-  "That's a good point. What made you think of that?",
+  "Tell me more about that.",
+  "What happened next?",
+  "How did that make you feel?",
+  "Can you describe that in detail?",
+  "What do you mean by that?",
+  "What made you think of that?",
 ];
 
 export function getFallbackResponse(): string {
