@@ -6,6 +6,7 @@
  */
 
 import type { ModelArtsGreetingResponse } from '@/types/huawei-services';
+import { getPromptsForFocus } from '@/lib/ai/cognitive-prompts';
 import { getIAMToken, getIAMConfig } from './huawei-iam.service';
 
 interface ModelArtsConfig {
@@ -57,6 +58,87 @@ function cleanAIResponse(text: string): string {
     cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   }
   
+  return cleaned;
+}
+
+/**
+ * Basic normalization for text comparisons
+ */
+function normalizeText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Choose the next starter question for a focus, avoiding repeats
+ */
+function pickNonRepeatingStarter(
+  assessmentFocus: 'memory' | 'language' | 'executive' | 'general',
+  conversationHistory: Array<{ speaker: 'user' | 'ai'; text: string }>
+): string {
+  const prompts = getPromptsForFocus(assessmentFocus);
+  const asked = new Set(
+    conversationHistory
+      .filter(t => t.speaker === 'ai')
+      .map(t => normalizeText(t.text))
+  );
+
+  for (const q of prompts.starterQuestions) {
+    if (!asked.has(normalizeText(q))) return q;
+  }
+  // If all were asked, just return the first as a safe fallback
+  return prompts.starterQuestions[0] || 'Tell me more about that.';
+}
+
+/**
+ * Enforce diversity and specificity in AI responses.
+ * - Avoid repeating previous AI question
+ * - Avoid generic "how was your day" after it's been asked once
+ * - If user declined (e.g., "no", "not much"), pivot to a concrete follow-up per focus
+ */
+function enforceResponseDiversity(
+  conversationHistory: Array<{ speaker: 'user' | 'ai'; text: string }>,
+  proposed: string,
+  assessmentFocus: 'memory' | 'language' | 'executive' | 'general'
+): string {
+  const cleaned = cleanAIResponse(proposed);
+  const lastAITurn = [...conversationHistory].reverse().find(t => t.speaker === 'ai');
+  const lastUserTurn = [...conversationHistory].reverse().find(t => t.speaker === 'user');
+
+  const cleanedNorm = normalizeText(cleaned);
+  const lastAiNorm = lastAITurn ? normalizeText(lastAITurn.text) : '';
+
+  const askedAboutDayBefore = conversationHistory.some(t =>
+    t.speaker === 'ai' && /how (?:was|is) (?:your|ur) day/i.test(t.text)
+  );
+
+  const isRepeat = cleanedNorm === lastAiNorm;
+  const isHowWasDay = /how (?:was|is) (?:your|ur) day/.test(cleanedNorm);
+
+  // If user said "no", "not much", or similar — pivot with concrete question
+  const userDeclined = lastUserTurn
+    ? /^(no|nope|not really|nothing|didnt|didn't|not much|im good|i'm good)\b/i.test(
+        lastUserTurn.text.trim()
+      )
+    : false;
+
+  if (userDeclined || isRepeat || (isHowWasDay && askedAboutDayBefore)) {
+    // Provide a concrete, domain-specific follow-up
+    switch (assessmentFocus) {
+      case 'memory':
+        return 'What did you have for breakfast today?';
+      case 'language':
+        return 'Describe a hobby you enjoy and why you like it.';
+      case 'executive':
+        return 'You have a free weekend. What would you plan to do?';
+      default:
+        return pickNonRepeatingStarter(assessmentFocus, conversationHistory);
+    }
+  }
+
   return cleaned;
 }
 
@@ -223,10 +305,10 @@ export async function generateConversationResponse(
       // Include context + guidance
       const prevUser = recentTurns[0]?.text?.substring(0, 50) || '';
       const prevAI = recentTurns[1]?.text?.substring(0, 50) || '';
-      prompt = `User: "${lastUserMessage}". Task: ${guidance}. RULES: 1 sentence only. NO emojis. NO "great to hear". Start your question directly.`;
+      prompt = `User: "${lastUserMessage}". Task: ${guidance}. RULES: 1 sentence only. NO emojis. Do not repeat earlier questions. Avoid asking about their day again.`;
     } else {
       // First turn - respond and guide
-      prompt = `User: "${lastUserMessage}". Task: ${guidance}. RULES: 1 sentence only. NO emojis. NO "great to hear". Start your question directly.`;
+      prompt = `User: "${lastUserMessage}". Task: ${guidance}. RULES: 1 sentence only. NO emojis. Start your question directly.`;
     }
 
     // Prepare request body using correct ModelArts format
@@ -271,8 +353,12 @@ export async function generateConversationResponse(
       throw new Error('Empty response from ModelArts');
     }
 
-    // Clean up the response
-    const aiResponse = cleanAIResponse(rawResponse);
+    // Clean and enforce diversity/specificity rules
+    const aiResponse = enforceResponseDiversity(
+      conversationHistory,
+      rawResponse,
+      assessmentFocus
+    );
 
     console.log('[ModelArts] Raw response:', rawResponse.substring(0, 100) + '...');
     console.log('[ModelArts] ✅ Cleaned response:', aiResponse.substring(0, 100) + '...');
